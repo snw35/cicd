@@ -1,0 +1,61 @@
+services: docker
+language: bash
+
+env:
+  - NVCHECKER_VERSION=1.7
+  - DFUPDATE_VERSION=0.0.5
+
+install:
+  - env | sort
+  - git clone https://github.com/docker-library/official-images.git ~/official-images
+  - docker run -it --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data -e NVCHECKER_GITHUB_TOKEN=${GH_TOKEN} snw35/nvchecker:${NVCHECKER_VERSION} nvchecker nvchecker.ini
+  - docker run -it --rm --name dfupdate --mount type=bind,source=${PWD},target=/data/ -w /data snw35/dfupdate:${DFUPDATE_VERSION}
+  - if [[ $(git status --porcelain | wc -l) -eq 0 ]] && [[ -z ${TRAVIS_TAG} ]]; then
+      echo "No local changes detected and no tag set, nothing to build, exiting.";
+      travis_terminate 0;
+    else
+      echo "Local changes or tagged commit detected, continuing...";
+    fi
+
+before_script:
+  - PROPOSED_TAG=`scripts/getproposedtag.sh Dockerfile`
+  - git config --local user.name "${DOCKER_USERNAME}"
+  - git config --local user.email "snw35@use.startmail.com"
+  - git remote add upstream https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git > /dev/null 2>&1
+  - if [ $(git ls-remote --tags upstream "${PROPOSED_TAG}" | wc -l) -eq 0 ]; then
+      echo "Propsoed tag does not exist on remote, continuing.";
+    else
+      echo "Proposed tag already exists on remote, skipping container build.";
+      travis_terminate 0;
+    fi
+
+script:
+  - env | sort
+  - travis_retry docker build -t "$IMAGE" .
+  - ~/official-images/test/run.sh "$IMAGE" || travis_terminate 1;
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  - docker push "$IMAGE"
+  - docker tag "$IMAGE" "${TRAVIS_REPO_SLUG}:latest"
+  - docker push "${TRAVIS_REPO_SLUG}:latest"
+
+after_script:
+  - docker images
+
+before_deploy:
+  - cp new_ver.txt old_ver.txt
+  - git checkout master
+  - git add -A
+  - git commit --message "Software Updated"
+  - git tag $PROPOSED_TAG
+  - git push --quiet --set-upstream upstream
+  - git push --tags --quiet --set-upstream upstream
+
+deploy:
+  provider: releases
+  api_key: "$GH_TOKEN"
+  skip_cleanup: true
+  body: "$PROPOSED_TAG"
+
+branches:
+  except:
+  - "/^untagged/"
