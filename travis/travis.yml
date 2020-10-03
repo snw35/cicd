@@ -32,7 +32,7 @@ before_script:
   - if [[ ! -z ${TAG_COMMAND+x} ]]; then
       DOCKER_TAG=`$TAG_COMMAND`;
     fi
-  - IMAGE="${TRAVIS_REPO_SLUG}:${IMAGE_TAG}"
+  - IMAGE="${TRAVIS_REPO_SLUG}:${DOCKER_TAG}"
   - git config --local user.name "${DOCKER_USERNAME}"
   - git config --local user.email "snw35@use.startmail.com"
   - git remote add upstream https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git > /dev/null 2>&1
