@@ -1,5 +1,7 @@
+os: linux
+dist: focal
 services: docker
-language: bash
+language: shell
 
 env:
   - NVCHECKER_VERSION=1.7
