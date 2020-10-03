@@ -4,8 +4,7 @@ services: docker
 language: shell
 
 env:
-  - NVCHECKER_VERSION=1.7
-  - DFUPDATE_VERSION=0.0.5
+  - NVCHECKER_VERSION=1.7 DFUPDATE_VERSION=0.0.5
 
 install:
   - env | sort
@@ -20,7 +19,9 @@ install:
     fi
 
 before_script:
-  - PROPOSED_TAG=`scripts/getproposedtag.sh Dockerfile`
+  - BASE_VERSION=`grep "FROM" Dockerfile | cut -d " " -f 2 | cut -d ":" -f 2`
+  - ENV_VERSIONS=`grep "^ENV .*_VERSION .*" Dockerfile | cut -d " " -f 3`
+  - PROPOSED_TAG=${ENV_VERSIONS//$'\n'/'-'}-${BASE_VERSION}
   - git config --local user.name "${DOCKER_USERNAME}"
   - git config --local user.email "snw35@use.startmail.com"
   - git remote add upstream https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git > /dev/null 2>&1
