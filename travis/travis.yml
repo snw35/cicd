@@ -55,9 +55,9 @@ before_deploy:
 
 deploy:
   provider: releases
-  api_key: "$GH_TOKEN"
-  skip_cleanup: true
-  body: "$PROPOSED_TAG"
+  token: "$GH_TOKEN"
+  cleanup: false
+  release_notes: "$PROPOSED_TAG"
 
 branches:
   except:
