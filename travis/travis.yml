@@ -13,6 +13,7 @@ env:
 
 install:
   - env | sort
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
   - git clone https://github.com/docker-library/official-images.git ~/official-images
   - docker run -it --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data -e NVCHECKER_GITHUB_TOKEN=${GH_TOKEN} snw35/nvchecker:${NVCHECKER_VERSION} nvchecker nvchecker.ini
   - docker run -it --rm --name dfupdate --mount type=bind,source=${PWD},target=/data/ -w /data snw35/dfupdate:${DFUPDATE_VERSION}
@@ -50,7 +51,6 @@ script:
   - env | sort
   - travis_retry docker build -t "$IMAGE" .
   - ~/official-images/test/run.sh "$IMAGE" || travis_terminate 1;
-  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
   - docker push "$IMAGE"
   - docker tag "$IMAGE" "${TRAVIS_REPO_SLUG}:latest"
   - docker push "${TRAVIS_REPO_SLUG}:latest"
