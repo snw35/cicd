@@ -5,8 +5,8 @@ language: shell
 
 env:
   global:
-  - NVCHECKER_VERSION=1.7
-  - DFUPDATE_VERSION=0.0.6
+  - NVCHECKER_VERSION=2.2
+  - DFUPDATE_VERSION=0.1.0
   - secure: aX5taem98mMr68fTcaphJ0nL0icc/MdL6r1kXkqw7dC/QlRLflQnO7dIQ3s0i1AhnglhXKvw9Z6uNhDs403g2BS3EVJCAjq5eS7Ix7S0r67Ptc+nD+deZqnETbOcaO2+/79wLu4voxTwsXJBHrvEyyT2PF627LNyaHIcOtXxMET1INs08dNdyCdHBIqCfnDaSw5tbEtcw0H5wFf4MSzh7hH2dKueR+z9XDfviqnnJmCVB+02AIR7yJnpGjQyJ3+Q4395h21fnfmgXi2/iWHrD4qCEpOgCXH5QWqdRE/fUZW/rda9ucIWRZXJJ76evA5nx7JeSvIZXFBLnkvk9UncBHjt0BtKMhEqipLMcfjf3g3LoAinPsQ5eDy1Tm4Ll9eFeSPMXEdJWF8H2wC5HvtxeDCkmzeKFxwj3dL1xrJZ1eks/5d1YUSQ9xYTAoWzJKI18ygEakfTQ3RCGa4NoTxFHchp6i5+ny+Yg4iu3GAek3YjEA5bXfqQZ51ob91Le9lwIz7T2srZ79ovkyj8CcPqDp0ivdc6Jqkm59/SkVBowT2o+vWz31XKe2M/tJx1VN2oL36NM2HVi5G4C0A8T5CX0O/3X3bP/2tyEcK63v5uGdT0n9qCwAQAZdt8OBNY2o7uBXE/tZQvQPaFcqmH8zov7zPGCi4eI1Un8XCOgJTm774=
   - secure: sWJNuazmuA+slPTKnifbQfWyxnq77ZV1r1Ou/0ZNyGETYfOCIzvoFCMTjsdab4ePPxP4zr+WADlzjYGx4tA2PJTuIPmiLLUZCtdyWCQ+eQLmd3qEPR2PZblpxwvPCX1aMK1iRL+le1hEl1bMHlMOYi3X6x9vxdq0fPqGgr9jG+B7hPqHU2rsMiVnFFS154lQlQDltKDgt1MGvSzNWNtuMzzDnLGloOT0279KXzom8EviCV2IqR0tzCT3ikO9CclIhpHEN9sYhbY5WP3NJYqFJiSArLFTle4xxhdMbxVCUJkLdliL7eXj2tpkIciSw8YT+iRIalNhFFRR+xmr/rhTYIIXmH0UgVlToccVd0mMTnpqF9lj6yd9xpX/ML7OzNep02UGVIke0sWuyvckZgVsmejiB7TxQvqoAUpWmS5KwfS++vr6Jn8nf0bEXjkwFPcpSkPIxPcSlCi5D7U/EzGu5ah88PT1I1Rh/ZFhi2AsqWHo8Hmu4Sw5N8g/JV3JyE7QuCD8aA6DvRNacSM/o6Zle8NapnCZuy3rvy9UgGVOjViQMZDV7xEGnHuZW0AwPmYzHc24ewUIKgopIaFNjwEhR1FEpFNVD6kKKpjZdOoXS5ORl0PrgrUF0jBsmOFVJyaUT1SScnIUW/3tgfQV7VtCqQ0syp2xiLjvs5+xxaXf4xU=
   - secure: tXWrvBN9WXp3OvkfHpQqvE94zUTPRF+C0MEmwJuS6Rg5y4x8aSUhp+ISxY77x3Agv2HWMEClWvDSlL5ps6+qxZ1zSkaKY89MdR6PkZ8De6oSsnM4rsJZArkBFTO7UgB3RM5Rc54dblyTkBmj5q6tVe7I+fojademms5ULSzX/i+S1sqlO0Gqu+TJ0IYPKZT9x1XXk7g2+uAcd0TwUgdSFzwDeAHmg2SEAj1NnYPNm01HsnW74gcv01KEqpG4wjtfPLqPSXDOiGDY8OGyDyXRSu1PX9yDELvVYV44pnODJTAOOknq/afC3XPpvbW3etvAlTjgQzbvOMz+chwKlwkZczy35Nb6G83PyYCH3fRbSb3zAvBk4znvnRLV/2SXLi0JLYEJjJrBhgDjfaOUZQFuQvGAlRqKshn4BI9A02+xc5MW55Q+1JUSp8s6T1e72BzXzLyJPp0WEpwXcw6jnnSsGenfKYyhsL6FNiW+9YIJNusgBV7+WUjLtEfJ0phwd/QKy4LS9p5rTDicqqABWat26AFxFF/LjDoJDTjMSiGaYQbTNn650mEX90U6nUGNwkSa9NMy0/ljEJgjliKJqV5A1zHWSS1dO7jMS0zweXzK5UfkaBQGn2R9O1VWkWp9tLoAdJ4wFZpjXMUyVKzqHMOHfyAibnMrFlztjQce+Fm+irA=
@@ -15,7 +15,7 @@ install:
   - env | sort
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
   - git clone https://github.com/docker-library/official-images.git ~/official-images
-  - docker run -it --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data -e NVCHECKER_GITHUB_TOKEN=${GH_TOKEN} snw35/nvchecker:${NVCHECKER_VERSION} nvchecker nvchecker.ini
+  - docker run -it --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data -e NVCHECKER_GITHUB_TOKEN=${GH_TOKEN} snw35/nvchecker:${NVCHECKER_VERSION} nvchecker -c nvchecker.toml
   - docker run -it --rm --name dfupdate --mount type=bind,source=${PWD},target=/data/ -w /data snw35/dfupdate:${DFUPDATE_VERSION}
   - if [[ $(git status --porcelain | wc -l) -eq 0 ]] && [[ -z ${TRAVIS_TAG} ]]; then
       echo "No local changes detected and no tag set, nothing to build, exiting.";
