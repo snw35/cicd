@@ -2,7 +2,6 @@ os: linux
 dist: focal
 services: docker
 language: shell
-virt: lxd
 
 env:
   global:
