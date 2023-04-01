@@ -1,0 +1,79 @@
+name: Reuseable container workflow
+
+env:
+  NVCHECKER_VERSION: 2.9
+  DFUPDATE_VERSION: 0.2.0
+
+on:
+  workflow_call:
+    inputs:
+      TAG_COMMAND:
+        required: false
+        type: string
+
+jobs:
+  build-only:
+    name: Container build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - run: env | sort
+    - run: docker build -t "${GITHUB_REPOSITORY}:$(date +%s)" .
+
+  container-update:
+    name: Automated container update
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      NVCHECKER_VERSION: 2.9
+      DFUPDATE_VERSION: 0.2.0
+    steps:
+    - uses: actions/checkout@v3
+    - run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
+    - run: git clone https://github.com/docker-library/official-images.git ~/official-images
+    - run: docker run --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data -e NVCHECKER_GITHUB_TOKEN=${GITHUB_TOKEN} snw35/nvchecker:${NVCHECKER_VERSION} nvchecker -l debug -c nvchecker.toml
+    - run: docker run --rm --name dfupdate --mount type=bind,source=${PWD},target=/data/ -w /data snw35/dfupdate:${DFUPDATE_VERSION}
+    - run: |
+        if [[ $(git status --porcelain | wc -l) -eq 0 ]]; then
+          echo "No local changes detected, nothing to build, exiting.";
+          exit 0;
+        else
+          echo "Local changes detected, continuing...";
+        fi
+    - run: echo "BASE_VERSION=`grep "FROM" Dockerfile | cut -d " " -f 2 | cut -d ":" -f 2`" >> $GITHUB_ENV
+    - run: echo "ENV_VERSIONS=`grep "^ENV .*_VERSION .*" Dockerfile | cut -d " " -f 3 | tr '\n' '-'`" >> $GITHUB_ENV
+    - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> $GITHUB_ENV
+    - run: |
+        if [[ -z "${IMAGE_TAG+x}" ]]; then
+          echo "DOCKER_TAG=$PROPOSED_TAG" >> $GITHUB_ENV;
+        else
+          echo "DOCKER_TAG=`grep "^ENV $IMAGE_TAG .*" Dockerfile | cut -d " " -f 3`" >> $GITHUB_ENV;
+        fi
+    - run: |
+        if [[ ! -z "${TAG_COMMAND+x}" ]]; then
+          echo "DOCKER_TAG=`$TAG_COMMAND`" >> $GITHUB_ENV;
+        fi
+    - run: echo "IMAGE=${GITHUB_REPOSITORY}:${DOCKER_TAG}" >> $GITHUB_ENV
+    - run: git config --local user.name "${GITHUB_REPOSITORY_OWNER}"
+    - run: git config --local user.email "snw35@use.startmail.com"
+    - run: git remote add upstream https://${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git > /dev/null 2>&1
+    - run: |
+        if [ $(git ls-remote --tags upstream "${PROPOSED_TAG}" | wc -l) -eq 0 ]; then
+          echo "Proposed tag does not exist on remote, continuing.";
+        else
+          echo "Proposed tag already exists on remote, skipping container build.";
+          exit 0;
+        fi
+    - run: docker build -t "$IMAGE" .
+    - run: ~/official-images/test/run.sh "$IMAGE" || exit 1;
+    - run: docker push "$IMAGE"
+    - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:latest"
+    - run: docker push "${GITHUB_REPOSITORY}:latest"
+    - run: docker images
+    - run: cp new_ver.json old_ver.json
+    - run: git add -A
+    - run: git commit --message "Software Updated"
+    - run: git tag $PROPOSED_TAG
+    - run: git push --quiet --set-upstream upstream
+    - run: git push --tags --quiet --set-upstream upstream
