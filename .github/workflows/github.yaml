@@ -10,6 +10,9 @@ on:
       TAG_COMMAND:
         required: false
         type: string
+      IMAGE_TAG:
+        required: false
+        type: string
 
 jobs:
   build-only:
