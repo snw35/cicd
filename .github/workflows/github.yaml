@@ -29,6 +29,8 @@ jobs:
     name: Automated container update
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       NVCHECKER_VERSION: 2.9
       DFUPDATE_VERSION: 0.2.0
@@ -86,3 +88,4 @@ jobs:
     - run: git tag $PROPOSED_TAG
     - run: git push --quiet --set-upstream upstream
     - run: git push --tags --quiet --set-upstream upstream
+    - uses: ncipollo/release-action@v1.12.0
