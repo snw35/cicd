@@ -53,16 +53,16 @@ jobs:
     - run: echo "ENV_VERSIONS=`grep "^ENV .*_VERSION .*" Dockerfile | cut -d " " -f 3 | tr '\n' '-'`" >> $GITHUB_ENV
     - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> $GITHUB_ENV
     - run: |
-        if [[ -z "${IMAGE_TAG+x}" ]]; then
+        if [[ -z "${IMAGE_TAG}" ]]; then
           echo "DOCKER_TAG=$PROPOSED_TAG" >> $GITHUB_ENV;
         else
           echo "DOCKER_TAG=`grep "^ENV $IMAGE_TAG .*" Dockerfile | cut -d " " -f 3`" >> $GITHUB_ENV;
         fi
     - run: |
-        if [[ ! -z "${TAG_COMMAND+x}" ]]; then
+        if [[ ! -z "${TAG_COMMAND}" ]]; then
           echo "DOCKER_TAG=`$TAG_COMMAND`" >> $GITHUB_ENV;
         fi
-    - run: echo "IMAGE=${GITHUB_REPOSITORY}:${DOCKER_TAG}" >> $GITHUB_ENV
+    - run: echo "IMAGE=${GITHUB_REPOSITORY}\:${DOCKER_TAG}" >> $GITHUB_ENV
     - run: git config --local user.name "${GITHUB_REPOSITORY_OWNER}"
     - run: git config --local user.email "snw35@use.startmail.com"
     - run: git remote add upstream https://${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git > /dev/null 2>&1
