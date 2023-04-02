@@ -88,6 +88,3 @@ jobs:
     - run: git tag $PROPOSED_TAG
     - run: git push --quiet --set-upstream upstream
     - run: git push --tags --quiet --set-upstream upstream
-    - uses: ncipollo/release-action@v1.12.0
-      with:
-        tag: $PROPOSED_TAG
