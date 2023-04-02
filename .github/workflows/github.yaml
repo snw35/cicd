@@ -34,6 +34,8 @@ jobs:
       DFUPDATE_VERSION: 0.2.0
     steps:
     - uses: actions/checkout@v3
+    - run: echo "TAG_COMMAND=${{ inputs.TAG_COMMAND }}" >> $GITHUB_ENV
+    - run: echo "IMAGE_TAG=${{ inputs.IMAGE_TAG }}" >> $GITHUB_ENV
     - run: env | sort
     - run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
     - run: git clone https://github.com/docker-library/official-images.git ~/official-images
@@ -51,14 +53,14 @@ jobs:
     - run: echo "ENV_VERSIONS=`grep "^ENV .*_VERSION .*" Dockerfile | cut -d " " -f 3 | tr '\n' '-'`" >> $GITHUB_ENV
     - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> $GITHUB_ENV
     - run: |
-        if [[ -z "${{ inputs.IMAGE_TAG }}" ]]; then
+        if [[ -z "${IMAGE_TAG+x}" ]]; then
           echo "DOCKER_TAG=$PROPOSED_TAG" >> $GITHUB_ENV;
         else
-          echo "DOCKER_TAG=`grep "^ENV ${{ inputs.IMAGE_TAG }} .*" Dockerfile | cut -d " " -f 3`" >> $GITHUB_ENV;
+          echo "DOCKER_TAG=`grep "^ENV $IMAGE_TAG .*" Dockerfile | cut -d " " -f 3`" >> $GITHUB_ENV;
         fi
     - run: |
-        if [[ ! -z "${{ inputs.TAG_COMMAND }}" ]]; then
-          echo "DOCKER_TAG=`${{ inputs.TAG_COMMAND }}`" >> $GITHUB_ENV;
+        if [[ ! -z "${TAG_COMMAND+x}" ]]; then
+          echo "DOCKER_TAG=`$TAG_COMMAND`" >> $GITHUB_ENV;
         fi
     - run: echo "IMAGE=${GITHUB_REPOSITORY}:${DOCKER_TAG}" >> $GITHUB_ENV
     - run: git config --local user.name "${GITHUB_REPOSITORY_OWNER}"
