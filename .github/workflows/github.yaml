@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: write
     env:
-      NVCHECKER_VERSION: 2.9
+      NVCHECKER_VERSION: 2.13.1
       DFUPDATE_VERSION: 0.2.0
     steps:
     - uses: actions/checkout@v3
@@ -41,7 +41,7 @@ jobs:
     - run: env | sort
     - run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
     - run: git clone https://github.com/docker-library/official-images.git ~/official-images
-    - run: docker run --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data -e NVCHECKER_GITHUB_TOKEN=${GITHUB_TOKEN} snw35/nvchecker:${NVCHECKER_VERSION} nvchecker -l debug -c nvchecker.toml
+    - run: docker run --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data snw35/nvchecker:${NVCHECKER_VERSION} nvchecker -l debug -c nvchecker.toml
     - run: docker run --rm --name dfupdate --mount type=bind,source=${PWD},target=/data/ -w /data snw35/dfupdate:${DFUPDATE_VERSION}
     - run: |
         if [[ $(git status --porcelain | wc -l) -eq 0 ]]; then
