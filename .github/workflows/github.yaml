@@ -112,23 +112,17 @@ jobs:
       - run: git tag $DOCKER_TAG
       - run: git push --quiet --set-upstream upstream
       - run: git push --tags --quiet --set-upstream upstream
-      - run: echo "docker_tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
-
-    # Create a GitHub release if tag was pushed (and changes were detected)
-  create-release:
-    name: Create GitHub Release
-    needs: container-update
-    if: steps.container-update.outputs. == 'true' && github.ref_name == github.event.repository.default_branch
-    env:
-      DOCKER_TAG: ${{ needs.container-update.outputs.docker_tag }}
-    uses: softprops/action-gh-release@v2
-    with:
-      tag_name: ${{ env.DOCKER_TAG }}
-      name: Release ${{ env.DOCKER_TAG }}
-      body: |
-        Automated release for ${{ env.DOCKER_TAG }}
-        Triggered by Github Actions workflow, see:
-        https://github.com/snw35/nvchecker
-        https://github.com/snw35/dfupdate
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Create a GitHub release if on default branch
+      - name: Create GitHub Release
+        if: github.ref_name == github.event.repository.default_branch
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.DOCKER_TAG }}
+          name: Release ${{ env.DOCKER_TAG }}
+          body: |
+            Automated release for ${{ env.DOCKER_TAG }}
+            Triggered by Github Actions workflow, see:
+            https://github.com/snw35/nvchecker
+            https://github.com/snw35/dfupdate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
