@@ -30,7 +30,7 @@ jobs:
       - run: env | sort
       - run: docker build -t "${GITHUB_REPOSITORY}:$(date +%s)" .
 
-  # Run nvchecker and dfupdate, then check if any updates were performed
+  # Run nvchecker and dfupdate, check if any updates were performed, then check if the remote tag already exists
   check-for-changes:
     name: Check for container update changes
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -49,30 +49,12 @@ jobs:
       - id: check_changes
         run: |
           if [[ $(git status --porcelain | wc -l) -eq 0 ]]; then
-            echo "No local changes detected, nothing to build, exiting."
+            echo "No local changes detected."
             echo "changed=false" >> $GITHUB_OUTPUT
           else
-            echo "Local changes detected, continuing..."
+            echo "Local changes detected."
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
-
-  # If updates were made, build and push the updated image, and commit them to the repo
-  container-update:
-    name: Automated container update
-    needs: check-for-changes
-    if: needs.check-for-changes.outputs.changed == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v3
-      - run: echo "TAG_COMMAND=${{ inputs.TAG_COMMAND }}" >> $GITHUB_ENV
-      - run: echo "IMAGE_TAG=${{ inputs.IMAGE_TAG }}" >> $GITHUB_ENV
-      - run: env | sort
-      - run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
-      - run: git clone https://github.com/docker-library/official-images.git ~/official-images
-      - run: docker run --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data snw35/nvchecker:${NVCHECKER_VERSION} nvchecker -l debug -c nvchecker.toml
-      - run: docker run --rm --name dfupdate --mount type=bind,source=${PWD},target=/data/ -w /data snw35/dfupdate:${DFUPDATE_VERSION}
       - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> $GITHUB_ENV
       - run: echo "ENV_VERSIONS=$(grep '^ENV .*_VERSION .*' Dockerfile | cut -d ' ' -f 3 | tr '\n' '-')" >> $GITHUB_ENV
       - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> $GITHUB_ENV
@@ -86,28 +68,63 @@ jobs:
           if [[ ! -z "${TAG_COMMAND}" ]]; then
             echo "DOCKER_TAG=$($TAG_COMMAND)" >> $GITHUB_ENV
           fi
-      - run: echo "IMAGE=${GITHUB_REPOSITORY}:${DOCKER_TAG}" >> $GITHUB_ENV
+      - run: echo "image=${GITHUB_REPOSITORY}:${DOCKER_TAG}" >> $GITHUB_OUTPUT
+      - run: echo "docker_tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
       - run: git config --local user.name "$GITHUB_REPOSITORY_OWNER"
       - run: git config --local user.email "snw35@use.startmail.com"
       - run: git remote add upstream https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git > /dev/null 2>&1
       - run: |
           if [ $(git ls-remote --tags upstream "${PROPOSED_TAG}" | wc -l) -eq 0 ]; then
-            echo "Proposed tag does not exist on remote, continuing."
-            # ... your tagging logic here ...
+            echo "Proposed tag does not exist on remote."
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
           else
-            echo "Tag already exists, skipping."
+            echo "Propsed tag already exists on remote."
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
           fi
+
+  # If updates were made and tag does not exist, build and push the updated image, and commit to the repo
+  container-update:
+    name: Automated container update
+    needs: check-for-changes
+    if: needs.check-for-changes.outputs.changed == 'true' && needs.check-for-changes.outputs.tag_exists == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      IMAGE: ${{ needs.check-for-changes.outputs.image }}
+      DOCKER_TAG: ${{ needs.check-for-changes.outputs.docker_tag }}
+    steps:
+      - uses: actions/checkout@v3
+      - run: env | sort
+      - run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
+      - run: git clone https://github.com/docker-library/official-images.git ~/official-images
+      - run: docker run --rm --name nvchecker --mount type=bind,source=${PWD},target=/data/ -w /data snw35/nvchecker:${NVCHECKER_VERSION} nvchecker -l debug -c nvchecker.toml
+      - run: docker run --rm --name dfupdate --mount type=bind,source=${PWD},target=/data/ -w /data snw35/dfupdate:${DFUPDATE_VERSION}
+      - run: docker build -t "$IMAGE" .
+      - run: ~/official-images/test/run.sh "$IMAGE" || exit 1;
+      - run: docker push "$IMAGE"
+      - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:latest"
+      - run: docker push "${GITHUB_REPOSITORY}:latest"
+      - run: docker images
+      - run: cp new_ver.json old_ver.json
+      - run: git add -A
+      - run: git commit --message "Software Updated"
+      - run: git tag $DOCKER_TAG
+      - run: git push --quiet --set-upstream upstream
+      - run: git push --tags --quiet --set-upstream upstream
 
       # Create a GitHub release if tag was pushed (and changes were detected)
       - name: Create GitHub Release
+        needs: container-update
+        if: steps.container-update.outputs. == 'true' && github.ref_name == github.event.repository.default_branch
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.DOCKER_TAG }}
           name: Release ${{ env.DOCKER_TAG }}
           body: |
-            Automated container release for ${{ env.DOCKER_TAG }}
-            
-            Changes:
-            - List your changes here or automate changelog generation.
+            Automated release for ${{ env.DOCKER_TAG }}
+            Triggered by Github Actions workflow, see:
+            https://github.com/snw35/nvchecker
+            https://github.com/snw35/dfupdate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
