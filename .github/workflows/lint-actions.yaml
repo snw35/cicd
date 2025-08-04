@@ -17,7 +17,7 @@ jobs:
         uses: rhysd/actionlint@v1
         with:
           # You can specify extra flags if needed (optional)
-          # args: -color
+          args: -color
 
       # Optionally, check workflow file formatting with yamllint as well
       - name: Lint workflow YAML files
