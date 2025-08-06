@@ -51,7 +51,7 @@ jobs:
       - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
       - id: check_changes
         run: |
-          if [[ $(git status --porcelain | wc -l) -eq 0 ]]; then
+          if [[ $(git status --porcelain Dockerfile | wc -l) -eq 0 ]]; then
             echo "No local changes detected."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
