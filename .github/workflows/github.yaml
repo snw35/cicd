@@ -1,7 +1,7 @@
 name: Reuseable container workflow
 
 env:
-  NVCHECKER_VERSION: 2.18
+  NVCHECKER_VERSION: 2.19
   DFUPDATE_VERSION: 2.1.0
   GH_TOKEN: ${{ github.token }}
 
