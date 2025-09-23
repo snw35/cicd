@@ -60,6 +60,8 @@ jobs:
             echo "Local changes detected."
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+      - run: sudo chown runner:runner Dockerfile
+      - run: sudo chown runner:runner new_ver.json
       - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> "$GITHUB_ENV"
       - run: echo "ENV_VERSIONS=$(grep '^ENV .*_VERSION .*' Dockerfile | cut -d ' ' -f 3 | tr '\n' '-')" >> "$GITHUB_ENV"
       - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
@@ -108,6 +110,8 @@ jobs:
       - run: git clone https://github.com/docker-library/official-images.git ~/official-images
       - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
       - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
+      - run: sudo chown runner:runner Dockerfile
+      - run: sudo chown runner:runner new_ver.json
       - run: docker build -t "$IMAGE" .
       - run: ~/official-images/test/run.sh "$IMAGE" || exit 1;
       - run: docker push "$IMAGE"
@@ -115,6 +119,9 @@ jobs:
       - run: docker push "${GITHUB_REPOSITORY}:latest"
       - run: docker images
       - run: cp new_ver.json old_ver.json
+      - run: git config --local user.name "$GITHUB_REPOSITORY_OWNER"
+      - run: git config --local user.email "snw35@use.startmail.com"
+      - run: git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
       - run: git add -A
       - run: git commit --message "Software Updated"
       - run: git tag "$DOCKER_TAG"
