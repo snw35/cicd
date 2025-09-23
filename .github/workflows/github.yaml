@@ -38,8 +38,8 @@ jobs:
     outputs:
       changed: ${{ steps.check_changes.outputs.changed }}
       tag_exists: ${{ steps.check_tags.outputs.tag_exists }}
-      image: ${{ steps.get_image.outputs.tag_exists }}
-      docker_tag: ${{ steps.get_docker_tag.outputs.tag_exists }}
+      image: ${{ steps.get_image.outputs.image }}
+      docker_tag: ${{ steps.get_docker_tag.outputs.docker_tag }}
     steps:
       - uses: actions/checkout@v4
       - run: echo "TAG_COMMAND=${{ inputs.TAG_COMMAND }}" >> "$GITHUB_ENV"
