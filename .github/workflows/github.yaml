@@ -32,6 +32,8 @@ jobs:
 
   # Run nvchecker and dfupdate, check if any updates were performed, then check if the remote tag already exists
   check-for-changes:
+    permissions:
+      contents: write
     name: Check for container update changes
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -90,6 +92,8 @@ jobs:
 
   # If updates were made and tag does not exist, build and push the updated image, and commit to the repo
   container-update:
+    permissions:
+      contents: write
     name: Automated container update
     needs: check-for-changes
     if: needs.check-for-changes.outputs.changed == 'true' && needs.check-for-changes.outputs.tag_exists == 'false'
