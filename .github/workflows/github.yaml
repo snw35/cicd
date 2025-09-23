@@ -2,7 +2,7 @@ name: Reuseable container workflow
 
 env:
   NVCHECKER_VERSION: 2.18
-  DFUPDATE_VERSION: 2.0.0
+  DFUPDATE_VERSION: 2.1.0
   GH_TOKEN: ${{ github.token }}
 
 # Provide inputs that control image tagging
