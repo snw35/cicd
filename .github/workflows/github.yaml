@@ -42,6 +42,7 @@ jobs:
       tag_exists: ${{ steps.check_tags.outputs.tag_exists }}
       image: ${{ steps.get_image.outputs.image }}
       docker_tag: ${{ steps.get_docker_tag.outputs.docker_tag }}
+      proposed_tag: ${{ steps.get_proposed_tag.outputs.proposed_tag }}
     steps:
       - uses: actions/checkout@v4
       - run: echo "TAG_COMMAND=${{ inputs.TAG_COMMAND }}" >> "$GITHUB_ENV"
@@ -79,6 +80,8 @@ jobs:
         run: echo "image=${GITHUB_REPOSITORY}:${DOCKER_TAG}" >> "$GITHUB_OUTPUT"
       - id: get_docker_tag
         run: echo "docker_tag=${DOCKER_TAG}" >> "$GITHUB_OUTPUT"
+      - id: get_proposed_tag
+        run: echo "proposed_tag=${PROPOSED_TAG}" >> "$GITHUB_OUTPUT"
       - run: git config --local user.name "$GITHUB_REPOSITORY_OWNER"
       - run: git config --local user.email "snw35@use.startmail.com"
       - run: git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
@@ -103,6 +106,7 @@ jobs:
     env:
       IMAGE: ${{ needs.check-for-changes.outputs.image }}
       DOCKER_TAG: ${{ needs.check-for-changes.outputs.docker_tag }}
+      PROPOSED_TAG: ${{ needs.check-for-changes.outputs.proposed_tag}}
       TAG_EXISTS: ${{ needs.check-for-changes.outputs.tag_exists }}
     steps:
       - uses: actions/checkout@v4
@@ -127,7 +131,7 @@ jobs:
       - run: git commit --message "Software Updated"
       - run: |
           if [[ "${TAG_EXISTS}" == "false" ]]; then
-            git tag "$DOCKER_TAG"
+            git tag "$PROPOSED_TAG"
           fi
       - run: git push --quiet --set-upstream upstream
       - run: git push --tags --quiet --set-upstream upstream
