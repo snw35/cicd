@@ -96,7 +96,7 @@ jobs:
   container-update:
     name: Automated container update
     needs: check-for-changes
-    if: needs.check-for-changes.outputs.changed == 'true' && needs.check-for-changes.outputs.tag_exists == 'false'
+    if: needs.check-for-changes.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
