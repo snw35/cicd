@@ -63,7 +63,7 @@ jobs:
       - run: sudo chown runner:runner Dockerfile
       - run: sudo chown runner:runner new_ver.json
       - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> "$GITHUB_ENV"
-      - run: echo "ENV_VERSIONS=$(grep '^ENV .*_VERSION .*' Dockerfile | cut -d ' ' -f 3 | tr '\n' '-')" >> "$GITHUB_ENV"
+      - run: echo "ENV_VERSIONS=$(grep '^ENV .*_VERSION .*' Dockerfile | cut -d ' ' -f 3 | tr '\n' '-' | sed 's/.$//')" >> "$GITHUB_ENV"
       - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
       - run: |
           if [[ -z "${IMAGE_TAG}" ]]; then
