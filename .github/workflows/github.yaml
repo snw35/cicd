@@ -63,7 +63,7 @@ jobs:
       - run: sudo chown runner:runner Dockerfile
       - run: sudo chown runner:runner new_ver.json
       - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> "$GITHUB_ENV"
-      - run: echo "ENV_VERSIONS=$(grep '^ENV .*_VERSION .*' Dockerfile | cut -d ' ' -f 3 | tr '\n' '-')" >> "$GITHUB_ENV"
+      - run: echo "ENV_VERSIONS=$(grep '^ENV .*_VERSION .*' Dockerfile | cut -d ' ' -f 3 | tr '\n' '-' | sed 's/.$//')" >> "$GITHUB_ENV"
       - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
       - run: |
           if [[ -z "${IMAGE_TAG}" ]]; then
@@ -96,13 +96,14 @@ jobs:
   container-update:
     name: Automated container update
     needs: check-for-changes
-    if: needs.check-for-changes.outputs.changed == 'true' && needs.check-for-changes.outputs.tag_exists == 'false'
+    if: needs.check-for-changes.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       IMAGE: ${{ needs.check-for-changes.outputs.image }}
       DOCKER_TAG: ${{ needs.check-for-changes.outputs.docker_tag }}
+      TAG_EXISTS: ${{ needs.check-for-changes.outputs.tag_exists }}
     steps:
       - uses: actions/checkout@v4
       - run: env | sort
@@ -124,7 +125,10 @@ jobs:
       - run: git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
       - run: git add -A
       - run: git commit --message "Software Updated"
-      - run: git tag "$DOCKER_TAG"
+      - run: |
+          if [[ "${TAG_EXISTS}" == "false" ]]; then
+            git tag "$DOCKER_TAG"
+          fi
       - run: git push --quiet --set-upstream upstream
       - run: git push --tags --quiet --set-upstream upstream
       # Create a GitHub release if on default branch
