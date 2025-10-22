@@ -127,12 +127,12 @@ jobs:
       - run: docker images
       - run: |
           if [[ "${CHANGED}" == 'true' ]]; then
-            git commit --message "Software Updated"
             cp new_ver.json old_ver.json
             git config --local user.name "$GITHUB_REPOSITORY_OWNER"
             git config --local user.email "snw35@use.startmail.com"
             git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
             git add -A
+            git commit --message "Software Updated"
           fi
       - run: |
           if [[ "${TAG_EXISTS}" == "false" ]]; then
