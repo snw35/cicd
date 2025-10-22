@@ -126,7 +126,7 @@ jobs:
       - run: docker push "${GITHUB_REPOSITORY}:latest"
       - run: docker images
       - run: |
-          if [[ "${CHANGED" == 'true' ]]; then
+          if [[ "${CHANGED}" == 'true' ]]; then
             git commit --message "Software Updated"
             cp new_ver.json old_ver.json
             git config --local user.name "$GITHUB_REPOSITORY_OWNER"
