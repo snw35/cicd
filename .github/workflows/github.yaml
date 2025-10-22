@@ -95,11 +95,12 @@ jobs:
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # If updates were made and tag does not exist, build and push the updated image, and commit to the repo
+  # If either updates were made or the tag does not exist,
+  # build and push the updated image, commit to the repo, and create a release.
   container-update:
     name: Automated container update
     needs: check-for-changes
-    if: needs.check-for-changes.outputs.changed == 'true'
+    if: needs.check-for-changes.outputs.changed == 'true' || needs.check-for-changes.outputs.tag_exists == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: write
