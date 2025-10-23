@@ -125,18 +125,21 @@ jobs:
       - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:latest"
       - run: docker push "${GITHUB_REPOSITORY}:latest"
       - run: docker images
+      - run: git config --local user.name "$GITHUB_REPOSITORY_OWNER"
+      - run: git config --local user.email "snw35@use.startmail.com"
       - run: |
           if [[ "${CHANGED}" == 'true' ]]; then
             cp new_ver.json old_ver.json
-            git config --local user.name "$GITHUB_REPOSITORY_OWNER"
-            git config --local user.email "snw35@use.startmail.com"
-            git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
             git add -A
             git commit --message "Software Updated"
           fi
       - run: |
           if [[ "${TAG_EXISTS}" == "false" ]]; then
             git tag "$PROPOSED_TAG"
+          fi
+      - run: |
+          if [[ "${CHANGED}" == 'true' || "${TAG_EXISTS}" == "false" ]]; then
+            git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
             git push --quiet --set-upstream upstream
             git push --tags --quiet --set-upstream upstream
           fi
