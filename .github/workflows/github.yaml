@@ -138,7 +138,7 @@ jobs:
             git tag "$PROPOSED_TAG"
           fi
       - run: |
-          if [[ "${CHANGED}" == 'true' || "${TAG_EXISTS}" == "false" ]]
+          if [[ "${CHANGED}" == 'true' || "${TAG_EXISTS}" == "false" ]]; then
             git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
             git push --quiet --set-upstream upstream
             git push --tags --quiet --set-upstream upstream
