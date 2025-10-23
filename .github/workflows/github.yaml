@@ -137,9 +137,9 @@ jobs:
       - run: |
           if [[ "${TAG_EXISTS}" == "false" ]]; then
             git tag "$PROPOSED_TAG"
+            git push --quiet --set-upstream upstream
+            git push --tags --quiet --set-upstream upstream
           fi
-      - run: git push --quiet --set-upstream upstream
-      - run: git push --tags --quiet --set-upstream upstream
       # Create a GitHub release if on default branch
       - name: Create GitHub Release
         if: github.ref_name == github.event.repository.default_branch
