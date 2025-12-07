@@ -70,7 +70,7 @@ jobs:
           if [[ -z "${IMAGE_TAG}" ]]; then
             echo "DOCKER_TAG=$PROPOSED_TAG" >> "$GITHUB_ENV"
           else
-            echo "DOCKER_TAG=$(grep "^ENV $IMAGE_TAG .*" Dockerfile | cut -d ' ' -f 3)" >> "$GITHUB_ENV"
+            echo "DOCKER_TAG=$(grep -E "^ENV +${IMAGE_TAG}(=| +)" Dockerfile | sed -E "s/^ENV +${IMAGE_TAG}[ =]+([^ ]*).*/\1/")" >> "$GITHUB_ENV"
           fi
       - run: |
           if [[ -n "${TAG_COMMAND}" ]]; then
