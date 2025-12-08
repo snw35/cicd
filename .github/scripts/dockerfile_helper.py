@@ -13,15 +13,12 @@ from dockerfile_parse import DockerfileParser
 
 
 def _load_parser(path: str) -> DockerfileParser:
-    with open(path, "r", encoding="utf-8") as handle:
-        return DockerfileParser(fileobj=handle)
+    return DockerfileParser(path=path)
 
 
 def _iter_env_items(parser: DockerfileParser) -> Iterable[Tuple[str, str]]:
-    # DockerfileParser.envs returns a list of dictionaries preserving order.
-    for env_block in parser.envs:
-        for key, value in env_block.items():
-            yield key, value
+    for key, value in parser.envs.items():
+        yield key, value
 
 
 def _env_versions(parser: DockerfileParser, suffix: str) -> None:
@@ -43,7 +40,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Read Dockerfile data using dockerfile-parse."
     )
-    parser.add_argument(
+    dockerfile_arg = argparse.ArgumentParser(add_help=False)
+    dockerfile_arg.add_argument(
         "--dockerfile",
         default="Dockerfile",
         help="Path to the Dockerfile to inspect.",
@@ -52,7 +50,9 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     env_versions = subparsers.add_parser(
-        "env-versions", help="Return hyphen-joined ENV values matching suffix."
+        "env-versions",
+        parents=[dockerfile_arg],
+        help="Return hyphen-joined ENV values matching suffix.",
     )
     env_versions.add_argument(
         "--suffix",
@@ -60,7 +60,11 @@ def main() -> None:
         help="Suffix to match for ENV keys (default: %(default)s).",
     )
 
-    get_env = subparsers.add_parser("get-env", help="Return the value for a specific ENV")
+    get_env = subparsers.add_parser(
+        "get-env",
+        parents=[dockerfile_arg],
+        help="Return the value for a specific ENV",
+    )
     get_env.add_argument("name", help="ENV name to read from the Dockerfile.")
 
     args = parser.parse_args()

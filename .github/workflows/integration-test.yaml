@@ -1,0 +1,44 @@
+name: Workflow integration test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  NVCHECKER_VERSION: 2.19
+  DFUPDATE_VERSION: 2.1.1
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dockerfile-parse for helper script
+        run: pip3 install dockerfile-parse
+
+      - name: Prepare sample workspace
+        working-directory: integration-test
+        run: rm -f new_ver.json
+
+      - name: Run nvchecker on sample config
+        working-directory: integration-test
+        run: docker run --rm --name nvchecker-integration --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
+
+      - name: Run dfupdate on sample Dockerfile
+        working-directory: integration-test
+        run: docker run --rm --name dfupdate-integration --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
+
+      - name: Verify Dockerfile updated with discovered version
+        working-directory: integration-test
+        run: |
+          EXPECTED="$(cat version.txt)"
+          UPDATED="$(python3 ../.github/scripts/dockerfile_helper.py get-env SAMPLE_VERSION --dockerfile Dockerfile)"
+          echo "Expected SAMPLE_VERSION=${EXPECTED}"
+          echo "Updated SAMPLE_VERSION=${UPDATED}"
+          if [ "${UPDATED}" != "${EXPECTED}" ]; then
+            echo "Integration test failed: Dockerfile SAMPLE_VERSION not updated"
+            exit 1
+          fi

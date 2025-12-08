@@ -1,0 +1,7 @@
+[nvchecker]
+oldver = "old_ver.json"
+newver = "new_ver.json"
+
+[sample]
+source = "cmd"
+cmd = "cat version.txt"
