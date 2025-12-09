@@ -17,6 +17,10 @@ on:
       IMAGE_TAG:
         required: false
         type: string
+      WORKDIR:
+        required: false
+        type: string
+        default: .
 
 jobs:
 
@@ -25,10 +29,13 @@ jobs:
     name: Container build
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      WORKDIR: ${{ inputs.WORKDIR }}
     steps:
       - uses: actions/checkout@v4
       - run: env | sort
       - run: docker build -t "${GITHUB_REPOSITORY}:$(date +%s)" .
+        working-directory: ${{ env.WORKDIR }}
 
   # Run nvchecker and dfupdate, check if any updates were performed, then check if the remote tag already exists
   check-for-changes:
@@ -37,6 +44,8 @@ jobs:
     name: Check for container update changes
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      WORKDIR: ${{ inputs.WORKDIR }}
     outputs:
       changed: ${{ steps.check_changes.outputs.changed }}
       tag_exists: ${{ steps.check_tags.outputs.tag_exists }}
@@ -51,7 +60,9 @@ jobs:
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
       - run: git clone https://github.com/docker-library/official-images.git ~/official-images
       - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
+        working-directory: ${{ env.WORKDIR }}
       - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
+        working-directory: ${{ env.WORKDIR }}
       - id: check_changes
         run: |
           if [[ $(git status --porcelain Dockerfile | wc -l) -eq 0 ]]; then
@@ -61,10 +72,14 @@ jobs:
             echo "Local changes detected."
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+        working-directory: ${{ env.WORKDIR }}
       - run: sudo chown runner:runner Dockerfile
+        working-directory: ${{ env.WORKDIR }}
       - run: sudo chown runner:runner new_ver.json
+        working-directory: ${{ env.WORKDIR }}
       - run: pip3 install dockerfile-parse
       - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> "$GITHUB_ENV"
+        working-directory: ${{ env.WORKDIR }}
       - run: |
           ENV_VERSIONS=$(python3 - <<'PY'
           from dockerfile_parse import DockerfileParser
@@ -76,7 +91,13 @@ jobs:
           PY
           )
           echo "ENV_VERSIONS=${ENV_VERSIONS}" >> "$GITHUB_ENV"
-      - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
+        working-directory: ${{ env.WORKDIR }}
+      - run: |
+          if [[ ${{ env.WORKDIR }} == '.' ]]; then
+            echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
+          else
+            echo "PROPOSED_TAG=${{ env.WORKDIR }}-${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
+          fi
       - run: |
           if [[ -z "${IMAGE_TAG}" ]]; then
             echo "DOCKER_TAG=$PROPOSED_TAG" >> "$GITHUB_ENV"
@@ -93,12 +114,22 @@ jobs:
           print(value)
           PY
             )
-            echo "DOCKER_TAG=${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
+            if [[ ${{ env.WORKDIR }} == '.' ]]; then
+              echo "DOCKER_TAG=${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
+            else
+              echo "DOCKER_TAG=${{ env.WORKDIR }}-${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
+            fi
           fi
+        working-directory: ${{ env.WORKDIR }}
       - run: |
           if [[ -n "${TAG_COMMAND}" ]]; then
-            echo "DOCKER_TAG=$($TAG_COMMAND)" >> "$GITHUB_ENV"
+            if [[ ${{ env.WORKDIR }} == '.' ]]; then
+              echo "DOCKER_TAG=$($TAG_COMMAND)" >> "$GITHUB_ENV"
+            else
+              echo "DOCKER_TAG=${{ env.WORKDIR }}-$($TAG_COMMAND)" >> "$GITHUB_ENV"
+            fi
           fi
+        working-directory: ${{ env.WORKDIR }}
       - id: get_image
         run: echo "image=${GITHUB_REPOSITORY}:${DOCKER_TAG}" >> "$GITHUB_OUTPUT"
       - id: get_docker_tag
@@ -133,16 +164,22 @@ jobs:
       PROPOSED_TAG: ${{ needs.check-for-changes.outputs.proposed_tag}}
       TAG_EXISTS: ${{ needs.check-for-changes.outputs.tag_exists }}
       CHANGED: ${{ needs.check-for-changes.outputs.changed }}
+      WORKDIR: ${{ inputs.WORKDIR }}
     steps:
       - uses: actions/checkout@v4
       - run: env | sort
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
       - run: git clone https://github.com/docker-library/official-images.git ~/official-images
       - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
+        working-directory: ${{ env.WORKDIR }}
       - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
+        working-directory: ${{ env.WORKDIR }}
       - run: sudo chown runner:runner Dockerfile
+        working-directory: ${{ env.WORKDIR }}
       - run: sudo chown runner:runner new_ver.json
+        working-directory: ${{ env.WORKDIR }}
       - run: docker build -t "$IMAGE" .
+        working-directory: ${{ env.WORKDIR }}
       - run: ~/official-images/test/run.sh "$IMAGE" || exit 1;
       - run: docker push "$IMAGE"
       - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:latest"
@@ -156,6 +193,7 @@ jobs:
             git add -A
             git commit --message "Software Updated"
           fi
+        working-directory: ${{ env.WORKDIR }}
       - run: |
           if [[ "${TAG_EXISTS}" == "false" ]]; then
             git tag "$PROPOSED_TAG"
