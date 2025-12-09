@@ -18,6 +18,7 @@ jobs:
       - name: Import versions from main workflow
         run: |
           python3 - <<'PY'
+          import os
           from pathlib import Path
           import yaml
 
@@ -30,10 +31,18 @@ jobs:
           if missing:
             raise SystemExit(f"Missing keys in main workflow env: {', '.join(missing)}")
 
-          with open("$GITHUB_ENV", "a", encoding="utf-8") as fh:
+          env_file = os.environ["GITHUB_ENV"]
+          print(f"Writing versions to {env_file}")
+          with open(env_file, "a", encoding="utf-8") as fh:
             for key in keys:
               fh.write(f"{key}={env[key]}\n")
+              print(f"export {key}={env[key]}")
           PY
+
+      - name: Show imported versions
+        run: |
+          echo "NVCHECKER_VERSION=${NVCHECKER_VERSION:-<unset>}"
+          echo "DFUPDATE_VERSION=${DFUPDATE_VERSION:-<unset>}"
 
       - name: Prepare sample workspace
         working-directory: integration-test
