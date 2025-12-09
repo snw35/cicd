@@ -7,7 +7,7 @@ This reusable GitHub Actions workflow is designed to enable fully-automated cont
   * https://github.com/snw35/nvchecker
   * https://github.com/snw35/dfupdate
 
-Both containers are also udated by this workflow, and by themselves.
+Both containers are also udated by this workflow, and therefore by themselves. The [ReadMe for dfupdate](https://github.com/snw35/dfupdate) explains how to set a repository up to use it.
 
 ## Troubleshooting Steps
 
@@ -25,7 +25,7 @@ The Github Actions linter can be run locally on Fedora with:
 podman run --security-opt label=disable --userns keep-id --rm -v $(pwd):/repo --workdir /repo rhysd/actionlint:latest -color
 ```
 
-## Using the reusable workflow for multiple Dockerfiles
+## Multiple Dockerfiles
 
 The reusable workflow accepts a `WORKDIR` input so you can run it against Dockerfiles in subdirectories. From a downstream repository you can fan out over multiple services with a matrix, for example:
 
@@ -35,7 +35,7 @@ jobs:
     strategy:
       matrix:
         workdir: [web, backend]
-    uses: snw35/cicd/.github/workflows/github.yaml@dockerfile-parse
+    uses: snw35/cicd/.github/workflows/github.yaml@mainline
     with:
       WORKDIR: ${{ matrix.workdir }}
       IMAGE_TAG: CONFD_VERSION
