@@ -4,10 +4,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  NVCHECKER_VERSION: 2.19
-  DFUPDATE_VERSION: 2.1.1
-
 jobs:
   integration-test:
     runs-on: ubuntu-latest
@@ -16,8 +12,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dockerfile-parse for helper script
-        run: pip3 install dockerfile-parse
+      - name: Install dependencies for helper script
+        run: pip3 install dockerfile-parse pyyaml
+
+      - name: Import versions from main workflow
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          workflow = Path(".github/workflows/github.yaml")
+          data = yaml.safe_load(workflow.read_text())
+          env = data.get("env", {})
+          keys = ("NVCHECKER_VERSION", "DFUPDATE_VERSION")
+
+          missing = [k for k in keys if k not in env]
+          if missing:
+            raise SystemExit(f"Missing keys in main workflow env: {', '.join(missing)}")
+
+          with open("$GITHUB_ENV", "a", encoding="utf-8") as fh:
+            for key in keys:
+              fh.write(f"{key}={env[key]}\n")
+          PY
 
       - name: Prepare sample workspace
         working-directory: integration-test
