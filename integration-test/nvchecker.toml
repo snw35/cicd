@@ -2,6 +2,6 @@
 oldver = "old_ver.json"
 newver = "new_ver.json"
 
-[sample]
+[SAMPLE]
 source = "cmd"
 cmd = "cat version.txt"
