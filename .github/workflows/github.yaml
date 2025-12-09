@@ -92,7 +92,12 @@ jobs:
           )
           echo "ENV_VERSIONS=${ENV_VERSIONS}" >> "$GITHUB_ENV"
         working-directory: ${{ env.WORKDIR }}
-      - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
+      - run: |
+          if [[ ${{ env.WORKDIR }} != '.' ]]; then
+            echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}-${{ env.WORKDIR }}" >> "$GITHUB_ENV"
+          else
+            echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
+          fi
       - run: |
           if [[ -z "${IMAGE_TAG}" ]]; then
             echo "DOCKER_TAG=$PROPOSED_TAG" >> "$GITHUB_ENV"
