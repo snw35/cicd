@@ -63,14 +63,37 @@ jobs:
           fi
       - run: sudo chown runner:runner Dockerfile
       - run: sudo chown runner:runner new_ver.json
+      - run: pip3 install dockerfile-parse
       - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> "$GITHUB_ENV"
-      - run: echo "ENV_VERSIONS=$(grep -E '^ENV +[^ ]*_VERSION(=| +)' Dockerfile | sed -E 's/^ENV +([^ =]*)[ =]+([^ ]*).*/\2/' | tr '\n' '-' | sed 's/-$//')" >> "$GITHUB_ENV"
+      - run: |
+          ENV_VERSIONS=$(python3 - <<'PY'
+          from dockerfile_parse import DockerfileParser
+
+          parser = DockerfileParser(path="Dockerfile")
+          suffix = "_VERSION"
+          versions = [value for key, value in parser.envs.items() if key.endswith(suffix)]
+          print("-".join(versions))
+          PY
+          )
+          echo "ENV_VERSIONS=${ENV_VERSIONS}" >> "$GITHUB_ENV"
       - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
       - run: |
           if [[ -z "${IMAGE_TAG}" ]]; then
             echo "DOCKER_TAG=$PROPOSED_TAG" >> "$GITHUB_ENV"
           else
-            echo "DOCKER_TAG=$(grep -E "^ENV +${IMAGE_TAG}(=| +)" Dockerfile | sed -E "s/^ENV +${IMAGE_TAG}[ =]+([^ ]*).*/\1/")" >> "$GITHUB_ENV"
+            IMAGE_TAG_VALUE=$(python3 - "${IMAGE_TAG}" <<'PY'
+          import sys
+          from dockerfile_parse import DockerfileParser
+
+          name = sys.argv[1]
+          parser = DockerfileParser(path="Dockerfile")
+          value = parser.envs.get(name)
+          if value is None:
+              sys.exit(f"Environment variable '{name}' not found in Dockerfile")
+          print(value)
+          PY
+            )
+            echo "DOCKER_TAG=${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
           fi
       - run: |
           if [[ -n "${TAG_COMMAND}" ]]; then

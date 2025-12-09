@@ -1,0 +1,83 @@
+name: Workflow integration test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies for helper script
+        run: pip3 install dockerfile-parse pyyaml
+
+      - name: Import versions from main workflow
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
+
+          workflow = Path(".github/workflows/github.yaml")
+          data = yaml.safe_load(workflow.read_text())
+          env = data.get("env", {})
+          keys = ("NVCHECKER_VERSION", "DFUPDATE_VERSION")
+
+          missing = [k for k in keys if k not in env]
+          if missing:
+            raise SystemExit(f"Missing keys in main workflow env: {', '.join(missing)}")
+
+          env_file = os.environ["GITHUB_ENV"]
+          print(f"Writing versions to {env_file}")
+          with open(env_file, "a", encoding="utf-8") as fh:
+            for key in keys:
+              fh.write(f"{key}={env[key]}\n")
+              print(f"export {key}={env[key]}")
+          PY
+
+      - name: Show imported versions
+        run: |
+          echo "NVCHECKER_VERSION=${NVCHECKER_VERSION:-<unset>}"
+          echo "DFUPDATE_VERSION=${DFUPDATE_VERSION:-<unset>}"
+
+      - name: Prepare sample workspace
+        working-directory: integration-test
+        run: rm -f new_ver.json
+
+      - name: Run nvchecker on sample config
+        working-directory: integration-test
+        run: docker run --rm --name nvchecker-integration --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
+
+      - name: Run dfupdate on sample Dockerfile
+        working-directory: integration-test
+        run: docker run --rm --name dfupdate-integration --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
+
+      - name: Fix Dockerfile permissions
+        working-directory: integration-test
+        run: sudo chown runner:runner Dockerfile
+
+      - name: Verify Dockerfile updated with discovered version
+        working-directory: integration-test
+        run: |
+          EXPECTED="$(cat version.txt)"
+          UPDATED="$(python3 - <<'PY'
+          from dockerfile_parse import DockerfileParser
+
+          name = "SAMPLE_VERSION"
+          parser = DockerfileParser(path="Dockerfile")
+          value = parser.envs.get(name)
+          if value is None:
+              raise SystemExit(f"Environment variable '{name}' not found in Dockerfile")
+          print(value)
+          PY
+          )"
+          echo "Expected SAMPLE_VERSION=${EXPECTED}"
+          echo "Updated SAMPLE_VERSION=${UPDATED}"
+          if [ "${UPDATED}" != "${EXPECTED}" ]; then
+            echo "Integration test failed: Dockerfile SAMPLE_VERSION not updated"
+            exit 1
+          fi
