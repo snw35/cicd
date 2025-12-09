@@ -82,16 +82,16 @@ jobs:
             echo "DOCKER_TAG=$PROPOSED_TAG" >> "$GITHUB_ENV"
           else
             IMAGE_TAG_VALUE=$(python3 - "${IMAGE_TAG}" <<'PY'
-            import sys
-            from dockerfile_parse import DockerfileParser
+          import sys
+          from dockerfile_parse import DockerfileParser
 
-            name = sys.argv[1]
-            parser = DockerfileParser(path="Dockerfile")
-            value = parser.envs.get(name)
-            if value is None:
-                sys.exit(f"Environment variable '{name}' not found in Dockerfile")
-            print(value)
-            PY
+          name = sys.argv[1]
+          parser = DockerfileParser(path="Dockerfile")
+          value = parser.envs.get(name)
+          if value is None:
+              sys.exit(f"Environment variable '{name}' not found in Dockerfile")
+          print(value)
+          PY
             )
             echo "DOCKER_TAG=${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
           fi
