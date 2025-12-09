@@ -65,13 +65,34 @@ jobs:
       - run: sudo chown runner:runner new_ver.json
       - run: pip3 install dockerfile-parse
       - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> "$GITHUB_ENV"
-      - run: echo "ENV_VERSIONS=$(python3 .github/scripts/dockerfile_helper.py env-versions --dockerfile Dockerfile)" >> "$GITHUB_ENV"
+      - run: |
+          ENV_VERSIONS=$(python3 - <<'PY'
+          from dockerfile_parse import DockerfileParser
+
+          parser = DockerfileParser(path="Dockerfile")
+          suffix = "_VERSION"
+          versions = [value for key, value in parser.envs.items() if key.endswith(suffix)]
+          print("-".join(versions))
+          PY
+          )
+          echo "ENV_VERSIONS=${ENV_VERSIONS}" >> "$GITHUB_ENV"
       - run: echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
       - run: |
           if [[ -z "${IMAGE_TAG}" ]]; then
             echo "DOCKER_TAG=$PROPOSED_TAG" >> "$GITHUB_ENV"
           else
-            IMAGE_TAG_VALUE=$(python3 .github/scripts/dockerfile_helper.py get-env "${IMAGE_TAG}")
+            IMAGE_TAG_VALUE=$(python3 - "${IMAGE_TAG}" <<'PY'
+            import sys
+            from dockerfile_parse import DockerfileParser
+
+            name = sys.argv[1]
+            parser = DockerfileParser(path="Dockerfile")
+            value = parser.envs.get(name)
+            if value is None:
+                sys.exit(f"Environment variable '{name}' not found in Dockerfile")
+            print(value)
+            PY
+            )
             echo "DOCKER_TAG=${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
           fi
       - run: |

@@ -64,7 +64,17 @@ jobs:
         working-directory: integration-test
         run: |
           EXPECTED="$(cat version.txt)"
-          UPDATED="$(python3 ../.github/scripts/dockerfile_helper.py get-env SAMPLE_VERSION --dockerfile Dockerfile)"
+          UPDATED="$(python3 - <<'PY'
+          from dockerfile_parse import DockerfileParser
+
+          name = "SAMPLE_VERSION"
+          parser = DockerfileParser(path="Dockerfile")
+          value = parser.envs.get(name)
+          if value is None:
+              raise SystemExit(f"Environment variable '{name}' not found in Dockerfile")
+          print(value)
+          PY
+          )"
           echo "Expected SAMPLE_VERSION=${EXPECTED}"
           echo "Updated SAMPLE_VERSION=${UPDATED}"
           if [ "${UPDATED}" != "${EXPECTED}" ]; then
