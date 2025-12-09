@@ -118,6 +118,7 @@ jobs:
               echo "DOCKER_TAG=${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
             else
               echo "DOCKER_TAG=${IMAGE_TAG_VALUE}-${{ env.WORKDIR }}" >> "$GITHUB_ENV"
+            fi
           fi
         working-directory: ${{ env.WORKDIR }}
       - run: |
