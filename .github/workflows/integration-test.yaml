@@ -56,6 +56,10 @@ jobs:
         working-directory: integration-test
         run: docker run --rm --name dfupdate-integration --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
 
+      - name: Fix Dockerfile permissions
+        working-directory: integration-test
+        run: sudo chown runner:runner Dockerfile
+
       - name: Verify Dockerfile updated with discovered version
         working-directory: integration-test
         run: |
