@@ -96,7 +96,7 @@ jobs:
           if [[ ${{ env.WORKDIR }} == '.' ]]; then
             echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
           else
-            echo "PROPOSED_TAG=${ENV_VERSIONS}-${BASE_VERSION}-${{ env.WORKDIR }}" >> "$GITHUB_ENV"
+            echo "PROPOSED_TAG=${{ env.WORKDIR }}-${ENV_VERSIONS}-${BASE_VERSION}" >> "$GITHUB_ENV"
           fi
       - run: |
           if [[ -z "${IMAGE_TAG}" ]]; then
@@ -117,7 +117,7 @@ jobs:
             if [[ ${{ env.WORKDIR }} == '.' ]]; then
               echo "DOCKER_TAG=${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
             else
-              echo "DOCKER_TAG=${IMAGE_TAG_VALUE}-${{ env.WORKDIR }}" >> "$GITHUB_ENV"
+              echo "DOCKER_TAG=${{ env.WORKDIR }}-${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
             fi
           fi
         working-directory: ${{ env.WORKDIR }}
@@ -126,7 +126,7 @@ jobs:
             if [[ ${{ env.WORKDIR }} == '.' ]]; then
               echo "DOCKER_TAG=$($TAG_COMMAND)" >> "$GITHUB_ENV"
             else
-              echo "DOCKER_TAG=$($TAG_COMMAND)-${{ env.WORKDIR }}" >> "$GITHUB_ENV"
+              echo "DOCKER_TAG=${{ env.WORKDIR }}-$($TAG_COMMAND)" >> "$GITHUB_ENV"
             fi
           fi
         working-directory: ${{ env.WORKDIR }}
