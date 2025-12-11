@@ -27,22 +27,22 @@ jobs:
           NEEDS_JSON: ${{ inputs.needs_json }}
         run: |
           tag="$(python3 - <<'PY'
-import json
-import os
-import sys
+          import json
+          import os
+          import sys
 
-needs = json.loads(os.environ["NEEDS_JSON"])
-tags = [
-    job.get("outputs", {}).get("docker_tag")
-    for job in needs.values()
-    if job.get("outputs", {}).get("changed") == "true"
-]
-tags = [tag for tag in tags if tag]
-if not tags:
-    sys.exit("No changed matrix jobs found")
-print(tags[0])
-PY
-)"
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          tags = [
+              job.get("outputs", {}).get("docker_tag")
+              for job in needs.values()
+              if job.get("outputs", {}).get("changed") == "true"
+          ]
+          tags = [tag for tag in tags if tag]
+          if not tags:
+              sys.exit("No changed matrix jobs found")
+          print(tags[0])
+          PY
+          )"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
