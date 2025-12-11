@@ -214,7 +214,7 @@ jobs:
           docker_tag=$(jq -r '.docker_tag' "$meta_file")
           proposed_tag=$(jq -r '.proposed_tag' "$meta_file")
 
-          { "CHANGED=$changed" 
+          { echo "CHANGED=$changed" 
             echo "TAG_EXISTS=$tag_exists"
             echo "IMAGE=$image"
             echo "DOCKER_TAG=$docker_tag"
