@@ -43,10 +43,10 @@ jobs:
 
   create-release:
     needs: update-images
-    if: github.ref_name == github.event.repository.default_branch && contains(toJson(needs.*.outputs.changed), 'true')
+    if: github.ref_name == github.event.repository.default_branch && needs.update-images.outputs.changed == 'true'
     uses: snw35/cicd/.github/workflows/create-release.yaml@mainline
     with:
-      needs_json: ${{ toJson(needs) }}
+      targets_json: ${{ needs.update-images.outputs.targets }}
     secrets: inherit
 ```
 
@@ -55,4 +55,4 @@ Which will process:
  * repo/web/Dockerfile
  * repo/backend/Dockerfile
 
-The default is to run for the current working directory only. Each matrix job emits `changed` and `docker_tag` outputs; the aggregator job above inspects those outputs and creates a single GitHub release if any Dockerfile changed.
+The default is to run for the current working directory only. Each matrix job emits `changed` and `docker_tag` outputs; the aggregator job above inspects those outputs and creates a single GitHub release if any Dockerfile changed. If multiple Dockerfiles were updated, the release tag and name will combine each updated workdir and tag (for example `web-1.0-backend-1.0`).

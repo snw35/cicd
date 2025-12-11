@@ -21,6 +21,9 @@ on:
       image:
         description: JSON map of full image references keyed by target name
         value: ${{ jobs.commit-and-release.outputs.images }}
+      targets:
+        description: JSON array of target metadata (name, workdir, changed, tag_exists, docker_tag, proposed_tag, image)
+        value: ${{ jobs.commit-and-release.outputs.targets_json }}
     inputs:
       # Provide a bash command that will create the image tag
       TAG_COMMAND:
@@ -306,6 +309,7 @@ jobs:
       docker_tags: ${{ steps.collect.outputs.docker_tags }}
       proposed_tags: ${{ steps.collect.outputs.proposed_tags }}
       images: ${{ steps.collect.outputs.images }}
+      targets_json: ${{ steps.collect.outputs.targets_json }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -369,35 +373,6 @@ jobs:
             echo "No changes to commit."
             echo "committed=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Create tags
-        if: steps.collect.outputs.meta_found == 'true'
-        env:
-          TARGETS_JSON: ${{ steps.collect.outputs.targets_json }}
-        run: |
-          python <<'PY'
-          import json
-          import os
-          import subprocess
-
-          targets = json.loads(os.environ.get("TARGETS_JSON", "[]"))
-          tagged = set()
-          for target in targets:
-            tag_exists = str(target.get("tag_exists", "false")).lower() == "true"
-            tag = target.get("proposed_tag")
-            if not tag or tag_exists:
-              continue
-            if tag in tagged:
-              print(f"Skipping duplicate tag request for {tag}")
-              continue
-            # Skip if the tag already exists locally (defensive if metadata was stale)
-            existing = subprocess.run(["git", "tag", "-l", tag], capture_output=True, text=True, check=True)
-            if existing.stdout.strip():
-              print(f"Tag {tag} already exists locally, skipping.")
-              continue
-            print(f"Tagging {tag}")
-            subprocess.run(["git", "tag", tag], check=True)
-            tagged.add(tag)
-          PY
       - name: Push commits and tags
         if: steps.collect.outputs.meta_found == 'true'
         run: |
@@ -409,10 +384,4 @@ jobs:
             git push --quiet --set-upstream upstream HEAD
           else
             echo "No commits to push."
-          fi
-
-          if [ "${{ steps.collect.outputs.tags_to_create }}" != "0" ]; then
-            git push --tags --quiet --set-upstream upstream
-          else
-            echo "No new tags to push."
           fi

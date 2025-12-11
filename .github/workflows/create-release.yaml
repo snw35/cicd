@@ -4,7 +4,11 @@ on:
   workflow_call:
     inputs:
       needs_json:
-        description: "Serialized needs context from the calling workflow (use `toJson(needs)` to pass matrix outputs)"
+        description: "Serialized needs context from the calling workflow (deprecated in favour of targets_json)"
+        required: false
+        type: string
+      targets_json:
+        description: "JSON array of target metadata (name, workdir, changed, docker_tag, etc.)"
         required: true
         type: string
     outputs:
@@ -15,34 +19,47 @@ on:
 jobs:
   create-release:
     name: Create release
-    # Only run when at least one matrix leg reported a change (implying commit-and-release ran)
-    if: contains(inputs.needs_json, '"changed":"true"')
+    # Only run when at least one target reports a change
+    if: contains(inputs.targets_json, '"changed": true')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
       tag: ${{ steps.pick_tag.outputs.tag }}
     steps:
-      - name: Pick release tag from changed matrix job
+      - name: Pick combined release tag from changed targets
         id: pick_tag
         env:
-          NEEDS_JSON: ${{ inputs.needs_json }}
+          TARGETS_JSON: ${{ inputs.targets_json }}
         run: |
           tag="$(python3 - <<'PY'
           import json
           import os
           import sys
 
-          needs = json.loads(os.environ["NEEDS_JSON"])
-          tags = [
-              job.get("outputs", {}).get("docker_tag")
-              for job in needs.values()
-              if job.get("outputs", {}).get("changed") == "true"
+          targets = json.loads(os.environ["TARGETS_JSON"])
+          changed = [
+              t for t in targets
+              if str(t.get("changed", "false")).lower() == "true"
           ]
-          tags = [tag for tag in tags if tag]
-          if not tags:
-              sys.exit("No changed matrix jobs found")
-          print(tags[0])
+          if not changed:
+              sys.exit("No changed targets found")
+
+          # Stable ordering by workdir then name to keep tag deterministic
+          changed.sort(key=lambda t: ((t.get("workdir") or "").lower(), (t.get("name") or "").lower()))
+
+          segments = []
+          for target in changed:
+              workdir = target.get("workdir") or target.get("name") or "target"
+              docker_tag = target.get("docker_tag") or target.get("proposed_tag")
+              if not docker_tag:
+                  continue
+              segments.append(f"{workdir}-{docker_tag}")
+
+          if not segments:
+              sys.exit("No docker_tag values found for changed targets")
+
+          print("-".join(segments))
           PY
           )"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -51,5 +68,6 @@ jobs:
           tag_name: ${{ steps.pick_tag.outputs.tag }}
           name: Release ${{ steps.pick_tag.outputs.tag }}
           body: Automated release for ${{ steps.pick_tag.outputs.tag }}
+          target_commitish: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
