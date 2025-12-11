@@ -181,6 +181,7 @@ jobs:
         with:
           name: check-${{ env.TARGET_NAME }}
           path: /tmp/meta.json
+          overwrite: true
 
   # If either updates were made or the tag does not exist,
   # build and push the updated image, then package changes for aggregation.
@@ -276,6 +277,7 @@ jobs:
           path: |
             /tmp/${{ env.TARGET_NAME }}-*
           if-no-files-found: error
+          overwrite: true
 
   commit-and-release:
     name: Commit and release aggregated updates
