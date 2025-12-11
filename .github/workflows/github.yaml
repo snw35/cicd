@@ -302,7 +302,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: update-*-${{ github.run_attempt }}
-          path: updates
+          path: /tmp/updates
           merge-multiple: true
       - id: collect
         run: |
@@ -311,7 +311,7 @@ jobs:
           import json
           import os
 
-          metas = glob.glob(os.path.join("updates", "*-meta.json"))
+          metas = glob.glob(os.path.join("/tmp/updates", "*-meta.json"))
           targets = []
           for meta_file in metas:
             with open(meta_file, "r", encoding="utf-8") as handle:
@@ -341,7 +341,7 @@ jobs:
         if: steps.collect.outputs.meta_found == 'true'
         run: |
           shopt -s nullglob
-          for patch in updates/*-changes.patch; do
+          for patch in /tmp/updates/*-changes.patch; do
             git apply --binary "$patch"
           done
       - name: Commit aggregated changes
