@@ -213,12 +213,13 @@ jobs:
           docker_tag=$(jq -r '.docker_tag' "$meta_file")
           proposed_tag=$(jq -r '.proposed_tag' "$meta_file")
 
-          echo "CHANGED=$changed" >> "$GITHUB_ENV"
-          echo "TAG_EXISTS=$tag_exists" >> "$GITHUB_ENV"
-          echo "IMAGE=$image" >> "$GITHUB_ENV"
-          echo "DOCKER_TAG=$docker_tag" >> "$GITHUB_ENV"
-          echo "PROPOSED_TAG=$proposed_tag" >> "$GITHUB_ENV"
-          echo "TARGET_NAME=${TARGET_NAME}" >> "$GITHUB_ENV"
+          { "CHANGED=$changed" 
+            echo "TAG_EXISTS=$tag_exists"
+            echo "IMAGE=$image"
+            echo "DOCKER_TAG=$docker_tag"
+            echo "PROPOSED_TAG=$proposed_tag"
+            echo "TARGET_NAME=${TARGET_NAME}"
+          } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - run: env | sort
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
