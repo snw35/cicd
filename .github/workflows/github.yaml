@@ -8,6 +8,19 @@ env:
 # Provide inputs that control image tagging
 on:
   workflow_call:
+    outputs:
+      changed:
+        description: Whether any matrix target detected Dockerfile changes or a missing tag
+        value: ${{ jobs.commit-and-release.outputs.changed_any }}
+      docker_tag:
+        description: JSON map of Docker tags keyed by target name
+        value: ${{ jobs.commit-and-release.outputs.docker_tags }}
+      proposed_tag:
+        description: JSON map of proposed tags keyed by target name
+        value: ${{ jobs.commit-and-release.outputs.proposed_tags }}
+      image:
+        description: JSON map of full image references keyed by target name
+        value: ${{ jobs.commit-and-release.outputs.images }}
     inputs:
       # Provide a bash command that will create the image tag
       TAG_COMMAND:
@@ -17,6 +30,10 @@ on:
       IMAGE_TAG:
         required: false
         type: string
+      TARGETS_JSON:
+        required: false
+        type: string
+        description: JSON array of targets; each target should have name, workdir, image_tag, tag_command
       WORKDIR:
         required: false
         type: string
@@ -41,21 +58,20 @@ jobs:
   check-for-changes:
     permissions:
       contents: write
-    name: Check for container update changes
+    name: Check ${{ matrix.target.name }} for container update changes
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(inputs.TARGETS_JSON != '' && inputs.TARGETS_JSON || format('[{{"name":"default","workdir":"{0}","image_tag":"{1}","tag_command":"{2}"}}]', inputs.WORKDIR, inputs.IMAGE_TAG, inputs.TAG_COMMAND)) }}
     env:
-      WORKDIR: ${{ inputs.WORKDIR }}
-    outputs:
-      changed: ${{ steps.check_changes.outputs.changed }}
-      tag_exists: ${{ steps.check_tags.outputs.tag_exists }}
-      image: ${{ steps.get_image.outputs.image }}
-      docker_tag: ${{ steps.get_docker_tag.outputs.docker_tag }}
-      proposed_tag: ${{ steps.get_proposed_tag.outputs.proposed_tag }}
+      WORKDIR: ${{ matrix.target.workdir }}
+      TARGET_NAME: ${{ matrix.target.name }}
     steps:
       - uses: actions/checkout@v4
-      - run: echo "TAG_COMMAND=${{ inputs.TAG_COMMAND }}" >> "$GITHUB_ENV"
-      - run: echo "IMAGE_TAG=${{ inputs.IMAGE_TAG }}" >> "$GITHUB_ENV"
+      - run: echo "TAG_COMMAND=${{ matrix.target.tag_command || inputs.TAG_COMMAND }}" >> "$GITHUB_ENV"
+      - run: echo "IMAGE_TAG=${{ matrix.target.image_tag || inputs.IMAGE_TAG }}" >> "$GITHUB_ENV"
       - run: env | sort
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
       - run: git clone https://github.com/docker-library/official-images.git ~/official-images
@@ -148,73 +164,220 @@ jobs:
             echo "Propsed tag already exists on remote."
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Capture check metadata
+        run: |
+          cat > /tmp/meta.json <<'EOF'
+          {
+            "name": "${TARGET_NAME}",
+            "workdir": "${WORKDIR}",
+            "changed": "${{ steps.check_changes.outputs.changed }}",
+            "tag_exists": "${{ steps.check_tags.outputs.tag_exists }}",
+            "image": "${{ steps.get_image.outputs.image }}",
+            "docker_tag": "${{ steps.get_docker_tag.outputs.docker_tag }}",
+            "proposed_tag": "${{ steps.get_proposed_tag.outputs.proposed_tag }}"
+          }
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: check-${{ env.TARGET_NAME }}
+          path: /tmp/meta.json
 
   # If either updates were made or the tag does not exist,
-  # build and push the updated image, commit to the repo, and create a release.
+  # build and push the updated image, then package changes for aggregation.
   container-update:
-    name: Automated container update
+    name: Automated container update (${{ matrix.target.name }})
     needs: check-for-changes
-    if: needs.check-for-changes.outputs.changed == 'true' || needs.check-for-changes.outputs.tag_exists == 'false'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(inputs.TARGETS_JSON != '' && inputs.TARGETS_JSON || format('[{{"name":"default","workdir":"{0}","image_tag":"{1}","tag_command":"{2}"}}]', inputs.WORKDIR, inputs.IMAGE_TAG, inputs.TAG_COMMAND)) }}
     env:
-      IMAGE: ${{ needs.check-for-changes.outputs.image }}
-      DOCKER_TAG: ${{ needs.check-for-changes.outputs.docker_tag }}
-      PROPOSED_TAG: ${{ needs.check-for-changes.outputs.proposed_tag}}
-      TAG_EXISTS: ${{ needs.check-for-changes.outputs.tag_exists }}
-      CHANGED: ${{ needs.check-for-changes.outputs.changed }}
-      WORKDIR: ${{ inputs.WORKDIR }}
+      WORKDIR: ${{ matrix.target.workdir }}
+      TARGET_NAME: ${{ matrix.target.name }}
     steps:
+      - name: Download check metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: check-${{ env.TARGET_NAME }}
+          path: meta
+      - id: load_meta
+        run: |
+          meta_file=meta/meta.json
+          changed=$(jq -r '.changed' "$meta_file")
+          tag_exists=$(jq -r '.tag_exists' "$meta_file")
+          image=$(jq -r '.image' "$meta_file")
+          docker_tag=$(jq -r '.docker_tag' "$meta_file")
+          proposed_tag=$(jq -r '.proposed_tag' "$meta_file")
+
+          echo "CHANGED=$changed" >> "$GITHUB_ENV"
+          echo "TAG_EXISTS=$tag_exists" >> "$GITHUB_ENV"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "DOCKER_TAG=$docker_tag" >> "$GITHUB_ENV"
+          echo "PROPOSED_TAG=$proposed_tag" >> "$GITHUB_ENV"
+          echo "TARGET_NAME=${TARGET_NAME}" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - run: env | sort
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: git clone https://github.com/docker-library/official-images.git ~/official-images
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
       - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
       - run: sudo chown runner:runner Dockerfile
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
       - run: sudo chown runner:runner new_ver.json
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
       - run: docker build -t "$IMAGE" .
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
       - run: ~/official-images/test/run.sh "$IMAGE" || exit 1;
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker push "$IMAGE"
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:latest"
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker push "${GITHUB_REPOSITORY}:latest"
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker images
-      - run: git config --local user.name "$GITHUB_REPOSITORY_OWNER"
-      - run: git config --local user.email "snw35@use.startmail.com"
-      - run: |
-          if [[ "${CHANGED}" == 'true' ]]; then
-            cp new_ver.json old_ver.json
-            git add -A
-            git commit --message "Software Updated"
-          fi
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+      - name: Stage and package repository changes
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        run: |
+          git add -A
+          git diff --binary --cached > "/tmp/${TARGET_NAME}-changes.patch"
         working-directory: ${{ env.WORKDIR }}
-      - run: |
-          if [[ "${TAG_EXISTS}" == "false" ]]; then
-            git tag "$PROPOSED_TAG"
-          fi
-      - run: |
-          if [[ "${CHANGED}" == 'true' || "${TAG_EXISTS}" == "false" ]]; then
-            git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
-            git push --quiet --set-upstream upstream
-            git push --tags --quiet --set-upstream upstream
-          fi
-      # Create a GitHub release if on default branch
-      - name: Create GitHub Release
-        if: github.ref_name == github.event.repository.default_branch
-        uses: softprops/action-gh-release@v2
+      - name: Write update metadata
+        run: |
+          cat > "/tmp/${TARGET_NAME}-meta.json" <<'EOF'
+          {
+            "name": "${TARGET_NAME}",
+            "workdir": "${WORKDIR}",
+            "changed": "${CHANGED}",
+            "tag_exists": "${TAG_EXISTS}",
+            "proposed_tag": "${PROPOSED_TAG}",
+            "docker_tag": "${DOCKER_TAG}",
+            "image": "${IMAGE}"
+          }
+          EOF
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ env.DOCKER_TAG }}
-          name: Release ${{ env.DOCKER_TAG }}
-          body: |
-            Automated release for ${{ env.DOCKER_TAG }}
-            Triggered by Github Actions workflow, see:
-            https://github.com/snw35/nvchecker
-            https://github.com/snw35/dfupdate
+          name: update-${{ env.TARGET_NAME }}
+          path: |
+            /tmp/${{ env.TARGET_NAME }}-*
+          if-no-files-found: error
+
+  commit-and-release:
+    name: Commit and release aggregated updates
+    needs: container-update
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed_any: ${{ steps.collect.outputs.changed_any }}
+      docker_tags: ${{ steps.collect.outputs.docker_tags }}
+      proposed_tags: ${{ steps.collect.outputs.proposed_tags }}
+      images: ${{ steps.collect.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: update-*
+          path: updates
+          merge-multiple: true
+      - id: collect
+        run: |
+          python <<'PY'
+          import glob
+          import json
+          import os
+
+          metas = glob.glob(os.path.join("updates", "*-meta.json"))
+          targets = []
+          for meta_file in metas:
+            with open(meta_file, "r", encoding="utf-8") as handle:
+              meta = json.load(handle)
+            meta["changed"] = str(meta.get("changed", "false")).lower() == "true"
+            meta["tag_exists"] = str(meta.get("tag_exists", "false")).lower() == "true"
+            targets.append(meta)
+
+          changed_any = any(t["changed"] or not t["tag_exists"] for t in targets)
+          docker_tags = {t.get("name"): t.get("docker_tag", "") for t in targets}
+          proposed_tags = {t.get("name"): t.get("proposed_tag", "") for t in targets}
+          images = {t.get("name"): t.get("image", "") for t in targets}
+          tags_to_create = [t.get("proposed_tag") for t in targets if t.get("proposed_tag") and not t["tag_exists"]]
+
+          output = os.environ["GITHUB_OUTPUT"]
+          with open(output, "a", encoding="utf-8") as handle:
+            handle.write(f"meta_found={str(len(targets) > 0).lower()}\n")
+            handle.write(f"changed_any={str(changed_any).lower()}\n")
+            handle.write(f"targets_json={json.dumps(targets)}\n")
+            handle.write(f"docker_tags={json.dumps(docker_tags)}\n")
+            handle.write(f"proposed_tags={json.dumps(proposed_tags)}\n")
+            handle.write(f"images={json.dumps(images)}\n")
+            handle.write(f"tags_to_create={len(tags_to_create)}\n")
+            handle.write(f"tag_names={json.dumps(tags_to_create)}\n")
+          PY
+      - name: Apply aggregated patches
+        if: steps.collect.outputs.meta_found == 'true'
+        run: |
+          shopt -s nullglob
+          for patch in updates/*-changes.patch; do
+            git apply --binary "$patch"
+          done
+      - name: Commit aggregated changes
+        if: steps.collect.outputs.meta_found == 'true'
+        run: |
+          if git status --porcelain | grep -q .; then
+            git config --local user.name "$GITHUB_REPOSITORY_OWNER"
+            git config --local user.email "snw35@use.startmail.com"
+            git add -A
+            git commit -m "Automated container updates"
+          else
+            echo "No changes to commit."
+          fi
+      - name: Create tags
+        if: steps.collect.outputs.meta_found == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGETS_JSON: ${{ steps.collect.outputs.targets_json }}
+        run: |
+          python <<'PY'
+          import json
+          import os
+          import subprocess
+
+          targets = json.loads(os.environ.get("TARGETS_JSON", "[]"))
+          for target in targets:
+            tag_exists = str(target.get("tag_exists", "false")).lower() == "true"
+            tag = target.get("proposed_tag")
+            if tag and not tag_exists:
+              print(f"Tagging {tag}")
+              subprocess.run(["git", "tag", tag], check=True)
+          PY
+      - name: Push commits and tags
+        if: steps.collect.outputs.meta_found == 'true'
+        run: |
+          git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
+          if git status --porcelain | grep -q .; then
+            git push --quiet --set-upstream upstream HEAD
+          else
+            echo "No commits to push."
+          fi
+
+          if [ "${{ steps.collect.outputs.tags_to_create }}" != "0" ]; then
+            git push --tags --quiet --set-upstream upstream
+          else
+            echo "No new tags to push."
+          fi
