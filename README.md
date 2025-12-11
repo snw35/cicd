@@ -44,31 +44,10 @@ jobs:
   create-release:
     needs: update-images
     if: github.ref_name == github.event.repository.default_branch && contains(toJson(needs.*.outputs.changed), 'true')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Pick release tag from changed matrix job
-        id: pick_tag
-        run: |
-          needs_json='${{ toJson(needs) }}'
-          tag="$(python3 - <<'PY' "$needs_json"
-import json, sys
-needs = json.loads(sys.argv[1])
-tags = [job["outputs"]["docker_tag"] for job in needs.values() if job["outputs"].get("changed") == "true"]
-if not tags:
-    sys.exit("No changed matrix jobs found")
-print(tags[0])
-PY
-)"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.pick_tag.outputs.tag }}
-          name: Release ${{ steps.pick_tag.outputs.tag }}
-          body: Automated release for ${{ steps.pick_tag.outputs.tag }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    uses: snw35/cicd/.github/workflows/create-release.yaml@mainline
+    with:
+      needs_json: ${{ toJson(needs) }}
+    secrets: inherit
 ```
 
 Which will process:

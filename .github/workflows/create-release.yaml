@@ -1,0 +1,53 @@
+name: Create release from matrix updates
+
+on:
+  workflow_call:
+    inputs:
+      needs_json:
+        description: "Serialized needs context from the calling workflow (use `toJson(needs)` to pass matrix outputs)"
+        required: true
+        type: string
+    outputs:
+      tag:
+        description: Tag used for the release
+        value: ${{ jobs.create-release.outputs.tag }}
+
+jobs:
+  create-release:
+    name: Create release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.pick_tag.outputs.tag }}
+    steps:
+      - name: Pick release tag from changed matrix job
+        id: pick_tag
+        env:
+          NEEDS_JSON: ${{ inputs.needs_json }}
+        run: |
+          tag="$(python3 - <<'PY'
+import json
+import os
+import sys
+
+needs = json.loads(os.environ["NEEDS_JSON"])
+tags = [
+    job.get("outputs", {}).get("docker_tag")
+    for job in needs.values()
+    if job.get("outputs", {}).get("changed") == "true"
+]
+tags = [tag for tag in tags if tag]
+if not tags:
+    sys.exit("No changed matrix jobs found")
+print(tags[0])
+PY
+)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pick_tag.outputs.tag }}
+          name: Release ${{ steps.pick_tag.outputs.tag }}
+          body: Automated release for ${{ steps.pick_tag.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
