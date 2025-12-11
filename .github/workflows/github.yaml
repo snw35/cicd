@@ -206,7 +206,7 @@ jobs:
           path: meta
       - id: load_meta
         run: |
-          meta_file=meta/meta.json
+          export meta_file="meta/meta.json"
           changed=$(jq -r '.changed' "$meta_file")
           tag_exists=$(jq -r '.tag_exists' "$meta_file")
           image=$(jq -r '.image' "$meta_file")
