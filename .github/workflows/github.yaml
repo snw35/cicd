@@ -179,7 +179,7 @@ jobs:
           EOF
       - uses: actions/upload-artifact@v4
         with:
-          name: check-${{ env.TARGET_NAME }}
+          name: check-${{ env.TARGET_NAME }}-${{ github.run_attempt }}
           path: /tmp/meta.json
           overwrite: true
 
@@ -203,7 +203,7 @@ jobs:
       - name: Download check metadata
         uses: actions/download-artifact@v4
         with:
-          name: check-${{ env.TARGET_NAME }}
+          name: check-${{ env.TARGET_NAME }}-${{ github.run_attempt }}
           path: meta
       - id: load_meta
         run: |
@@ -277,7 +277,7 @@ jobs:
           EOF
       - uses: actions/upload-artifact@v4
         with:
-          name: update-${{ env.TARGET_NAME }}
+          name: update-${{ env.TARGET_NAME }}-${{ github.run_attempt }}
           path: |
             /tmp/${{ env.TARGET_NAME }}-*
           if-no-files-found: error
@@ -301,7 +301,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
-          pattern: update-*
+          pattern: update-*-${{ github.run_attempt }}
           path: updates
           merge-multiple: true
       - id: collect
