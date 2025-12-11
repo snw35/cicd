@@ -366,12 +366,23 @@ jobs:
           import subprocess
 
           targets = json.loads(os.environ.get("TARGETS_JSON", "[]"))
+          tagged = set()
           for target in targets:
             tag_exists = str(target.get("tag_exists", "false")).lower() == "true"
             tag = target.get("proposed_tag")
-            if tag and not tag_exists:
-              print(f"Tagging {tag}")
-              subprocess.run(["git", "tag", tag], check=True)
+            if not tag or tag_exists:
+              continue
+            if tag in tagged:
+              print(f"Skipping duplicate tag request for {tag}")
+              continue
+            # Skip if the tag already exists locally (defensive if metadata was stale)
+            existing = subprocess.run(["git", "tag", "-l", tag], capture_output=True, text=True, check=True)
+            if existing.stdout.strip():
+              print(f"Tag {tag} already exists locally, skipping.")
+              continue
+            print(f"Tagging {tag}")
+            subprocess.run(["git", "tag", tag], check=True)
+            tagged.add(tag)
           PY
       - name: Push commits and tags
         if: steps.collect.outputs.meta_found == 'true'
