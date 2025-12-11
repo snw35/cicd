@@ -392,6 +392,9 @@ jobs:
         run: |
           git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
           if [ "${{ steps.commit.outputs.committed }}" = "true" ]; then
+            # Rebase onto latest upstream to avoid non-fast-forward failures when multiple runs push
+            git fetch upstream "${GITHUB_REF_NAME}"
+            git rebase "upstream/${GITHUB_REF_NAME}"
             git push --quiet --set-upstream upstream HEAD
           else
             echo "No commits to push."
