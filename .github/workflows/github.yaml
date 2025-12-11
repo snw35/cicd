@@ -256,7 +256,11 @@ jobs:
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         run: |
           git add -A
-          git diff --binary --cached > "/tmp/${TARGET_NAME}-changes.patch"
+          if git diff --cached --quiet; then
+            echo "No repository changes to package for ${TARGET_NAME}"
+          else
+            git diff --binary --cached > "/tmp/${TARGET_NAME}-changes.patch"
+          fi
         working-directory: ${{ env.WORKDIR }}
       - name: Write update metadata
         run: |
