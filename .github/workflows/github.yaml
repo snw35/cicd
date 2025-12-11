@@ -61,6 +61,9 @@ jobs:
     name: Check ${{ matrix.target.name }} for container update changes
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check_changes.outputs.changed }}
+      tag_exists: ${{ steps.check_tags.outputs.tag_exists }}
     strategy:
       fail-fast: false
       matrix:
@@ -189,7 +192,9 @@ jobs:
   container-update:
     name: Automated container update (${{ matrix.target.name }})
     needs: check-for-changes
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && (needs.check-for-changes.outputs.changed == 'true' || needs.check-for-changes.outputs.tag_exists == 'false')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -290,7 +295,9 @@ jobs:
   commit-and-release:
     name: Commit and release aggregated updates
     needs: container-update
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && needs.container-update.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
