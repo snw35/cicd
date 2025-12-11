@@ -73,8 +73,6 @@ jobs:
       - run: echo "TAG_COMMAND=${{ matrix.target.tag_command || inputs.TAG_COMMAND }}" >> "$GITHUB_ENV"
       - run: echo "IMAGE_TAG=${{ matrix.target.image_tag || inputs.IMAGE_TAG }}" >> "$GITHUB_ENV"
       - run: env | sort
-      - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
-      - run: git clone https://github.com/docker-library/official-images.git ~/official-images
       - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
         working-directory: ${{ env.WORKDIR }}
       - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
@@ -91,7 +89,10 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
       - run: sudo chown runner:runner Dockerfile
         working-directory: ${{ env.WORKDIR }}
-      - run: sudo chown runner:runner new_ver.json
+      - run: |
+          if [ -f new_ver.json ]; then
+            sudo chown runner:runner new_ver.json
+          fi
         working-directory: ${{ env.WORKDIR }}
       - run: pip3 install dockerfile-parse
       - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> "$GITHUB_ENV"
@@ -154,10 +155,10 @@ jobs:
         run: echo "proposed_tag=${PROPOSED_TAG}" >> "$GITHUB_OUTPUT"
       - run: git config --local user.name "$GITHUB_REPOSITORY_OWNER"
       - run: git config --local user.email "snw35@use.startmail.com"
-      - run: git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
       - id: check_tags
         run: |
-          if [ "$(git ls-remote --tags upstream "${PROPOSED_TAG}" | wc -l)" -eq 0 ]; then
+          repo_url="https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if [ "$(git ls-remote --tags "$repo_url" "${PROPOSED_TAG}" | wc -l)" -eq 0 ]; then
             echo "Proposed tag does not exist on remote."
             echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           else
@@ -204,10 +205,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: check-${{ env.TARGET_NAME }}-${{ github.run_attempt }}
-          path: meta
+          path: /tmp/meta
       - id: load_meta
         run: |
-          export meta_file="meta/meta.json"
+          export meta_file="/tmp/meta/meta.json"
           changed=$(jq -r '.changed' "$meta_file")
           tag_exists=$(jq -r '.tag_exists' "$meta_file")
           image=$(jq -r '.image' "$meta_file")
@@ -225,7 +226,7 @@ jobs:
       - run: env | sort
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
-      - run: git clone https://github.com/docker-library/official-images.git ~/official-images
+      - run: git clone --depth 1 https://github.com/docker-library/official-images.git ~/official-images
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
@@ -236,7 +237,10 @@ jobs:
       - run: sudo chown runner:runner Dockerfile
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
-      - run: sudo chown runner:runner new_ver.json
+      - run: |
+          if [ -f new_ver.json ]; then
+            sudo chown runner:runner new_ver.json
+          fi
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
       - run: docker build -t "$IMAGE" .
