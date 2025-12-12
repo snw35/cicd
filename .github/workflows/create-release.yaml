@@ -20,7 +20,9 @@ jobs:
   create-release:
     name: Create release
     # Only run when at least one target reports a change
-    if: contains(inputs.targets_json, '"changed": true')
+    # Quote the expression so the `:` inside the substring doesn't confuse YAML
+    if: >-
+      ${{ contains(inputs.targets_json, '"changed": true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
