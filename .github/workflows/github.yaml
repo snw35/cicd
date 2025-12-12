@@ -280,6 +280,14 @@ jobs:
             git diff --binary --cached > "/tmp/${TARGET_SLUG}-changes.patch"
           fi
         working-directory: ${{ env.WORKDIR }}
+      - name: Refresh changed flag after packaging
+        run: |
+          if git diff --cached --quiet && git diff --quiet; then
+            echo "CHANGED=false" >> "$GITHUB_ENV"
+          else
+            echo "CHANGED=true" >> "$GITHUB_ENV"
+          fi
+        working-directory: ${{ env.WORKDIR }}
       - name: Write update metadata
         run: |
           cat > "/tmp/${TARGET_SLUG}-meta.json" <<'EOF'
