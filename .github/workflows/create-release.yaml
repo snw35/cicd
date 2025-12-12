@@ -111,7 +111,7 @@ jobs:
     name: Create release
     needs: aggregate-changes
     # Only run when the aggregated changes report an update or missing tag
-    if: needs.aggregate-changes.outputs.changed_any == 'true'
+    if: needs.aggregate-changes.outputs.changed_any == 'true' && needs.aggregate-changes.outputs.committed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

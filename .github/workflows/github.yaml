@@ -57,16 +57,13 @@ jobs:
       - run: docker build -t "${GITHUB_REPOSITORY}:$(date +%s)" .
         working-directory: ${{ env.WORKDIR }}
 
-  # Run nvchecker and dfupdate, check if any updates were performed, then check if the remote tag already exists
-  check-for-changes:
-    permissions:
-      contents: write
-    name: Check ${{ matrix.target.name }} for container update changes
+  # Run nvchecker/dfupdate, build/push when needed, and package artifacts per target.
+  container-update:
+    name: Automated container update (${{ matrix.target.name }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.check_changes.outputs.changed }}
-      tag_exists: ${{ steps.check_tags.outputs.tag_exists }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -157,12 +154,6 @@ jobs:
             fi
           fi
         working-directory: ${{ env.WORKDIR }}
-      - id: get_image
-        run: echo "image=${GITHUB_REPOSITORY}:${DOCKER_TAG}" >> "$GITHUB_OUTPUT"
-      - id: get_docker_tag
-        run: echo "docker_tag=${DOCKER_TAG}" >> "$GITHUB_OUTPUT"
-      - id: get_proposed_tag
-        run: echo "proposed_tag=${PROPOSED_TAG}" >> "$GITHUB_OUTPUT"
       - id: check_tags
         run: |
           repo_url="https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
@@ -173,90 +164,19 @@ jobs:
             echo "Propsed tag already exists on remote."
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Capture check metadata
+      - name: Set update variables
         run: |
-          cat > /tmp/meta.json <<'EOF'
           {
-            "name": "${TARGET_NAME}",
-            "workdir": "${WORKDIR}",
-            "changed": "${{ steps.check_changes.outputs.changed }}",
-            "tag_exists": "${{ steps.check_tags.outputs.tag_exists }}",
-            "image": "${{ steps.get_image.outputs.image }}",
-            "docker_tag": "${{ steps.get_docker_tag.outputs.docker_tag }}",
-            "proposed_tag": "${{ steps.get_proposed_tag.outputs.proposed_tag }}"
-          }
-          EOF
-      - uses: actions/upload-artifact@v4
-        with:
-          name: check-${{ env.TARGET_SLUG }}-${{ github.run_attempt }}
-          path: /tmp/meta.json
-          overwrite: true
-
-  # If either updates were made or the tag does not exist,
-  # build and push the updated image, then package changes for aggregation.
-  container-update:
-    name: Automated container update (${{ matrix.target.name }})
-    needs: check-for-changes
-    if: >
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-      && (needs.check-for-changes.outputs.changed == 'true' || needs.check-for-changes.outputs.tag_exists == 'false')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        target: ${{ fromJson(inputs.TARGETS_JSON != '' && inputs.TARGETS_JSON || format('[{{"name":"{0}","workdir":"{0}","image_tag":"{1}","tag_command":"{2}"}}]', inputs.WORKDIR, inputs.IMAGE_TAG, inputs.TAG_COMMAND)) }}
-    env:
-      WORKDIR: ${{ matrix.target.workdir }}
-      TARGET_NAME: ${{ matrix.target.name }}
-    steps:
-      - name: Compute target slug
-        run: |
-          TARGET_SLUG=$(echo "${TARGET_NAME}" | tr '/.' '-')
-          echo "TARGET_SLUG=${TARGET_SLUG}" >> "$GITHUB_ENV"
-      - name: Download check metadata
-        uses: actions/download-artifact@v4
-        with:
-          name: check-${{ env.TARGET_SLUG }}-${{ github.run_attempt }}
-          path: /tmp/meta
-      - id: load_meta
-        run: |
-          export meta_file="/tmp/meta/meta.json"
-          changed=$(jq -r '.changed' "$meta_file")
-          tag_exists=$(jq -r '.tag_exists' "$meta_file")
-          image=$(jq -r '.image' "$meta_file")
-          docker_tag=$(jq -r '.docker_tag' "$meta_file")
-          proposed_tag=$(jq -r '.proposed_tag' "$meta_file")
-
-          { echo "CHANGED=$changed" 
-            echo "TAG_EXISTS=$tag_exists"
-            echo "IMAGE=$image"
-            echo "DOCKER_TAG=$docker_tag"
-            echo "PROPOSED_TAG=$proposed_tag"
+            echo "CHANGED=${{ steps.check_changes.outputs.changed }}"
+            echo "TAG_EXISTS=${{ steps.check_tags.outputs.tag_exists }}"
+            echo "IMAGE=${GITHUB_REPOSITORY}:${DOCKER_TAG}"
             echo "TARGET_NAME=${TARGET_NAME}"
           } >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
       - run: env | sort
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: git clone --depth 1 https://github.com/docker-library/official-images.git ~/official-images
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
-      - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
-        working-directory: ${{ env.WORKDIR }}
-      - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
-        working-directory: ${{ env.WORKDIR }}
-      - run: sudo chown runner:runner Dockerfile
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
-        working-directory: ${{ env.WORKDIR }}
-      - run: |
-          if [ -f new_ver.json ]; then
-            sudo chown runner:runner new_ver.json
-          fi
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
-        working-directory: ${{ env.WORKDIR }}
       - run: docker build -t "$IMAGE" .
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
