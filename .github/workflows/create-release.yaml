@@ -134,7 +134,8 @@ jobs:
               if str(t.get("changed", "false")).lower() == "true"
           ]
           if not changed:
-              sys.exit("No changed targets found")
+              print("")
+              sys.exit(0)
 
           # Stable ordering by workdir then name to keep tag deterministic
           changed.sort(key=lambda t: ((t.get("workdir") or "").lower(), (t.get("name") or "").lower()))
@@ -148,13 +149,19 @@ jobs:
               segments.append(f"{workdir}-{docker_tag}")
 
           if not segments:
-              sys.exit("No docker_tag values found for changed targets")
+              print("")
+              sys.exit(0)
 
           print("-".join(segments))
           PY
           )"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ -n "$tag" ]; then
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changed targets found; skipping tag creation."
+          fi
       - uses: softprops/action-gh-release@v2
+        if: steps.pick_tag.outputs.tag != ''
         with:
           tag_name: ${{ steps.pick_tag.outputs.tag }}
           name: Release ${{ steps.pick_tag.outputs.tag }}
