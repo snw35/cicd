@@ -3,10 +3,6 @@ name: Create release from matrix updates
 on:
   workflow_call:
     inputs:
-      needs_json:
-        description: "Serialized needs context from the calling workflow (deprecated in favour of targets_json)"
-        required: false
-        type: string
       targets_json:
         description: "JSON array of target metadata (name, workdir, changed, docker_tag, etc.)"
         required: true
