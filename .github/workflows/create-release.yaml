@@ -142,11 +142,10 @@ jobs:
 
           segments = []
           for target in changed:
-              workdir = target.get("workdir") or target.get("name") or "target"
               docker_tag = target.get("docker_tag") or target.get("proposed_tag")
               if not docker_tag:
                   continue
-              segments.append(f"{workdir}-{docker_tag}")
+              segments.append(docker_tag)
 
           if not segments:
               print("")
