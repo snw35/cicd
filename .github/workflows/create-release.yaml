@@ -1,0 +1,170 @@
+name: Create release from matrix updates
+
+on:
+  workflow_call:
+    inputs:
+      targets_json:
+        description: "JSON array of target metadata (name, workdir, changed, docker_tag, etc.)"
+        required: false
+        default: ""
+        type: string
+    outputs:
+      tag:
+        description: Tag used for the release
+        value: ${{ jobs.create-release.outputs.tag }}
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  aggregate-changes:
+    name: Aggregate changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed_any: ${{ steps.collect.outputs.changed_any }}
+      docker_tags: ${{ steps.collect.outputs.docker_tags }}
+      proposed_tags: ${{ steps.collect.outputs.proposed_tags }}
+      images: ${{ steps.collect.outputs.images }}
+      targets_json: ${{ steps.collect.outputs.targets_json }}
+      meta_found: ${{ steps.collect.outputs.meta_found }}
+      committed: ${{ steps.commit.outputs.committed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: update-*-${{ github.run_attempt }}
+          path: /tmp/updates
+          merge-multiple: true
+        continue-on-error: true
+      - id: collect
+        run: |
+          python <<'PY'
+          import glob
+          import json
+          import os
+
+          metas = glob.glob(os.path.join("/tmp/updates", "*-meta.json"))
+          targets = []
+          for meta_file in metas:
+            with open(meta_file, "r", encoding="utf-8") as handle:
+              meta = json.load(handle)
+            meta["changed"] = str(meta.get("changed", "false")).lower() == "true"
+            meta["tag_exists"] = str(meta.get("tag_exists", "false")).lower() == "true"
+            targets.append(meta)
+
+          changed_any = any(t["changed"] or not t["tag_exists"] for t in targets)
+          docker_tags = {t.get("name"): t.get("docker_tag", "") for t in targets}
+          proposed_tags = {t.get("name"): t.get("proposed_tag", "") for t in targets}
+          images = {t.get("name"): t.get("image", "") for t in targets}
+          tags_to_create = [t.get("proposed_tag") for t in targets if t.get("proposed_tag") and not t["tag_exists"]]
+
+          output = os.environ["GITHUB_OUTPUT"]
+          with open(output, "a", encoding="utf-8") as handle:
+            handle.write(f"meta_found={str(len(targets) > 0).lower()}\n")
+            handle.write(f"changed_any={str(changed_any).lower()}\n")
+            handle.write(f"targets_json={json.dumps(targets)}\n")
+            handle.write(f"docker_tags={json.dumps(docker_tags)}\n")
+            handle.write(f"proposed_tags={json.dumps(proposed_tags)}\n")
+            handle.write(f"images={json.dumps(images)}\n")
+            handle.write(f"tags_to_create={len(tags_to_create)}\n")
+            handle.write(f"tag_names={json.dumps(tags_to_create)}\n")
+          PY
+      - name: Apply aggregated patches
+        if: steps.collect.outputs.meta_found == 'true'
+        run: |
+          shopt -s nullglob
+          for patch in /tmp/updates/*-changes.patch; do
+            git apply --binary "$patch"
+          done
+      - name: Commit aggregated changes
+        id: commit
+        if: steps.collect.outputs.meta_found == 'true'
+        run: |
+          if git status --porcelain | grep -q .; then
+            git config --local user.name "$GITHUB_REPOSITORY_OWNER"
+            git config --local user.email "snw35@use.startmail.com"
+            git add -A
+            git commit -m "Automated container updates"
+            echo "committed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changes to commit."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Push commits and tags
+        if: steps.collect.outputs.meta_found == 'true'
+        run: |
+          git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
+          if [ "${{ steps.commit.outputs.committed }}" = "true" ]; then
+            # Rebase onto latest upstream to avoid non-fast-forward failures when multiple runs push
+            git fetch upstream "${GITHUB_REF_NAME}"
+            git rebase "upstream/${GITHUB_REF_NAME}"
+            git push --quiet --set-upstream upstream HEAD
+          else
+            echo "No commits to push."
+          fi
+
+  create-release:
+    name: Create release
+    needs: aggregate-changes
+    # Only run when the aggregated changes report an update or missing tag
+    if: needs.aggregate-changes.outputs.changed_any == 'true' && needs.aggregate-changes.outputs.committed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.pick_tag.outputs.tag }}
+    steps:
+      - name: Pick combined release tag from changed targets
+        id: pick_tag
+        env:
+          TARGETS_JSON: ${{ needs.aggregate-changes.outputs.targets_json != '' && needs.aggregate-changes.outputs.targets_json || inputs.targets_json }}
+        run: |
+          tag="$(python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          targets = json.loads(os.environ["TARGETS_JSON"])
+          changed = [
+              t for t in targets
+              if str(t.get("changed", "false")).lower() == "true"
+          ]
+          if not changed:
+              print("")
+              sys.exit(0)
+
+          # Stable ordering by workdir then name to keep tag deterministic
+          changed.sort(key=lambda t: ((t.get("workdir") or "").lower(), (t.get("name") or "").lower()))
+
+          segments = []
+          for target in changed:
+              docker_tag = target.get("docker_tag") or target.get("proposed_tag")
+              if not docker_tag:
+                  continue
+              segments.append(docker_tag)
+
+          if not segments:
+              print("")
+              sys.exit(0)
+
+          print("-".join(segments))
+          PY
+          )"
+          if [ -n "$tag" ]; then
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changed targets found; skipping tag creation."
+          fi
+      - uses: softprops/action-gh-release@v2
+        if: steps.pick_tag.outputs.tag != ''
+        with:
+          tag_name: ${{ steps.pick_tag.outputs.tag }}
+          name: Release ${{ steps.pick_tag.outputs.tag }}
+          body: Automated release for ${{ steps.pick_tag.outputs.tag }}
+          target_commitish: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
