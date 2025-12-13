@@ -25,6 +25,16 @@ The Github Actions linter can be run locally on Fedora with:
 podman run --security-opt label=disable --userns keep-id --rm -v $(pwd):/repo --workdir /repo rhysd/actionlint:latest -color
 ```
 
+## Dry-run with act
+
+Create a `.secrets` file with any secrets referenced by the workflow (for example `GH_TOKEN=fake`, `DOCKER_PASSWORD=fake`) and run:
+
+```
+act schedule -W .github/workflows/github.yaml -j container-update --secret-file .secrets
+```
+
+This simulates the scheduled run locally without pushing images or tags.
+
 ## Multiple Dockerfiles
 
 The reusable workflow accepts a `WORKDIR` input so you can run it against Dockerfiles in subdirectories. From a downstream repository you can fan out over multiple services with a matrix, for example:
@@ -45,8 +55,6 @@ jobs:
     needs: update-images
     if: github.ref_name == github.event.repository.default_branch && needs.update-images.outputs.changed == 'true'
     uses: snw35/cicd/.github/workflows/create-release.yaml@mainline
-    with:
-      targets_json: ${{ needs.update-images.outputs.targets }}
     secrets: inherit
 ```
 
@@ -55,4 +63,4 @@ Which will process:
  * repo/web/Dockerfile
  * repo/backend/Dockerfile
 
-The default is to run for the current working directory only. Each matrix job emits `changed` and `docker_tag` outputs; the aggregator job above inspects those outputs and creates a single GitHub release if any Dockerfile changed. If multiple Dockerfiles were updated, the release tag and name will combine each updated workdir and tag (for example `web-1.0-backend-1.0`).
+The default is to run for the current working directory only. Each matrix run emits `changed` (aggregated across targets), `docker_tag`, `proposed_tag`, `image`, and `targets` outputs. The downstream `create-release` workflow collects the per-target artifacts produced by the updater, applies the combined patch, and creates a single release if any Dockerfile changed. If multiple Dockerfiles were updated, the release tag and name will combine each updated workdir and tag (for example `web-1.0-backend-1.0`).

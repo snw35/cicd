@@ -210,7 +210,7 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
       - name: Write update metadata
         run: |
-          cat > "/tmp/${TARGET_SLUG}-meta.json" <<'EOF'
+          cat > "/tmp/${TARGET_SLUG}-meta.json" <<EOF
           {
             "name": "${TARGET_NAME}",
             "workdir": "${WORKDIR}",

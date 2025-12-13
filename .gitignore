@@ -208,3 +208,6 @@ __marimo__/
 
 # Integration test artifacts
 integration-test/new_ver.json
+
+# Github actions act secrets
+.secrets
