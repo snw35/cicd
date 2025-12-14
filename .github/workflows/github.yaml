@@ -106,7 +106,23 @@ jobs:
           fi
         working-directory: ${{ env.WORKDIR }}
       - run: pip3 install dockerfile-parse
-      - run: echo "BASE_VERSION=$(grep 'FROM' Dockerfile | cut -d ' ' -f 2 | cut -d ':' -f 2)" >> "$GITHUB_ENV"
+      - run: |
+          BASE_VERSION=$(python3 - <<'PY'
+          from dockerfile_parse import DockerfileParser
+
+          parser = DockerfileParser(path="Dockerfile")
+          base = (parser.baseimage or "").strip()
+          if not base:
+              raise SystemExit("No base image found in Dockerfile")
+
+          image_no_digest = base.split("@", 1)[0]
+          slash = image_no_digest.rfind("/")
+          colon = image_no_digest.rfind(":")
+          tag = image_no_digest[colon + 1 :] if colon > slash else "latest"
+          print(tag)
+          PY
+          )
+          echo "BASE_VERSION=${BASE_VERSION}" >> "$GITHUB_ENV"
         working-directory: ${{ env.WORKDIR }}
       - run: |
           ENV_VERSIONS=$(python3 - <<'PY'
