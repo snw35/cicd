@@ -184,6 +184,10 @@ jobs:
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker push "$IMAGE"
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+      - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:${WORKDIR}"
+        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.WORKDIR != '' && env.WORKDIR != '.'
+      - run: docker push "${GITHUB_REPOSITORY}:${WORKDIR}"
+        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.WORKDIR != '' && env.WORKDIR != '.'
       - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:latest"
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker push "${GITHUB_REPOSITORY}:latest"
