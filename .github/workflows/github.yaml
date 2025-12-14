@@ -80,6 +80,7 @@ jobs:
       - run: echo "TAG_COMMAND=${{ matrix.target.tag_command || inputs.TAG_COMMAND }}" >> "$GITHUB_ENV"
       - run: echo "IMAGE_TAG=${{ matrix.target.image_tag || inputs.IMAGE_TAG }}" >> "$GITHUB_ENV"
       - run: env | sort
+      - run: df -h
       - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
         working-directory: ${{ env.WORKDIR }}
       - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
@@ -178,6 +179,8 @@ jobs:
       - run: git clone --depth 1 https://github.com/docker-library/official-images.git ~/official-images
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: rm -rf /opt/hostedtoolcache
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+      - run: df -h
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker build -t "$IMAGE" .
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
