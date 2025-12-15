@@ -125,12 +125,44 @@ jobs:
           echo "BASE_VERSION=${BASE_VERSION}" >> "$GITHUB_ENV"
         working-directory: ${{ env.WORKDIR }}
       - run: |
+          # Collect ENV values across all Dockerfile stages (DockerfileParser.envs only returns the final stage).
           ENV_VERSIONS=$(python3 - <<'PY'
           from dockerfile_parse import DockerfileParser
+          from dockerfile_parse.util import extract_key_values
 
-          parser = DockerfileParser(path="Dockerfile")
+          def collect_envs(path="Dockerfile"):
+              parser = DockerfileParser(path=path)
+              envs = {}
+              stage_envs = {}
+              stage_args = {}
+              global_args = {}
+              in_stage = False
+
+              for instruction in parser.structure:
+                  name = instruction.get("instruction")
+                  value = instruction.get("value")
+
+                  if name == "FROM":
+                      in_stage = True
+                      stage_envs = {}
+                      stage_args = {}
+                  elif name == "ARG":
+                      for key, val in extract_key_values(False, stage_args, stage_envs, value):
+                          if in_stage:
+                              if key in global_args:
+                                  val = global_args[key]
+                              stage_args[key] = val
+                          else:
+                              global_args[key] = val
+                  elif name == "ENV":
+                      for key, val in extract_key_values(True, stage_args, stage_envs, value):
+                          stage_envs[key] = val
+                          envs[key] = val
+
+              return envs
+
           suffix = "_VERSION"
-          versions = [value for key, value in parser.envs.items() if key.endswith(suffix)]
+          versions = [value for key, value in collect_envs().items() if key.endswith(suffix)]
           print("-".join(versions))
           PY
           )
@@ -149,10 +181,42 @@ jobs:
             IMAGE_TAG_VALUE=$(python3 - "${IMAGE_TAG}" <<'PY'
           import sys
           from dockerfile_parse import DockerfileParser
+          from dockerfile_parse.util import extract_key_values
 
           name = sys.argv[1]
-          parser = DockerfileParser(path="Dockerfile")
-          value = parser.envs.get(name)
+
+          def collect_envs(path="Dockerfile"):
+              parser = DockerfileParser(path=path)
+              envs = {}
+              stage_envs = {}
+              stage_args = {}
+              global_args = {}
+              in_stage = False
+
+              for instruction in parser.structure:
+                  inst = instruction.get("instruction")
+                  value = instruction.get("value")
+
+                  if inst == "FROM":
+                      in_stage = True
+                      stage_envs = {}
+                      stage_args = {}
+                  elif inst == "ARG":
+                      for key, val in extract_key_values(False, stage_args, stage_envs, value):
+                          if in_stage:
+                              if key in global_args:
+                                  val = global_args[key]
+                              stage_args[key] = val
+                          else:
+                              global_args[key] = val
+                  elif inst == "ENV":
+                      for key, val in extract_key_values(True, stage_args, stage_envs, value):
+                          stage_envs[key] = val
+                          envs[key] = val
+
+              return envs
+
+          value = collect_envs().get(name)
           if value is None:
               sys.exit(f"Environment variable '{name}' not found in Dockerfile")
           print(value)

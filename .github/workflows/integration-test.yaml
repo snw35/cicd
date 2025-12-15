@@ -66,10 +66,39 @@ jobs:
           EXPECTED="$(cat version.txt)"
           UPDATED="$(python3 - <<'PY'
           from dockerfile_parse import DockerfileParser
+          from dockerfile_parse.util import extract_key_values
 
           name = "SAMPLE_VERSION"
           parser = DockerfileParser(path="Dockerfile")
-          value = parser.envs.get(name)
+
+          envs = {}
+          stage_envs = {}
+          stage_args = {}
+          global_args = {}
+          in_stage = False
+
+          for instruction in parser.structure:
+              inst = instruction.get("instruction")
+              val = instruction.get("value")
+
+              if inst == "FROM":
+                  in_stage = True
+                  stage_envs = {}
+                  stage_args = {}
+              elif inst == "ARG":
+                  for key, arg_val in extract_key_values(False, stage_args, stage_envs, val):
+                      if in_stage:
+                          if key in global_args:
+                              arg_val = global_args[key]
+                          stage_args[key] = arg_val
+                      else:
+                          global_args[key] = arg_val
+              elif inst == "ENV":
+                  for key, env_val in extract_key_values(True, stage_args, stage_envs, val):
+                      stage_envs[key] = env_val
+                      envs[key] = env_val
+
+          value = envs.get(name)
           if value is None:
               raise SystemExit(f"Environment variable '{name}' not found in Dockerfile")
           print(value)
