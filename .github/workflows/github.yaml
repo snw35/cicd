@@ -2,7 +2,7 @@ name: Reuseable container workflow
 
 env:
   NVCHECKER_VERSION: 2.19
-  DFUPDATE_VERSION: 2.1.1
+  DFUPDATE_VERSION: 2.2.1
   GH_TOKEN: ${{ github.token }}
 
 # Provide inputs that control image tagging
@@ -56,7 +56,7 @@ jobs:
       - run: env | sort
       - run: df -h
       - run: rm -rf /opt/hostedtoolcache
-      - run: df -h      
+      - run: df -h
       - run: docker build -t "${GITHUB_REPOSITORY}:$(date +%s)" .
         working-directory: ${{ env.WORKDIR }}
 
