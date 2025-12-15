@@ -30,6 +30,8 @@ jobs:
       targets_json: ${{ steps.collect.outputs.targets_json }}
       meta_found: ${{ steps.collect.outputs.meta_found }}
       committed: ${{ steps.commit.outputs.committed }}
+      tags_to_create: ${{ steps.collect.outputs.tags_to_create }}
+      tag_names: ${{ steps.collect.outputs.tag_names }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,7 +113,7 @@ jobs:
     name: Create release
     needs: aggregate-changes
     # Only run when the aggregated changes report an update or missing tag
-    if: needs.aggregate-changes.outputs.changed_any == 'true' && needs.aggregate-changes.outputs.committed == 'true'
+    if: needs.aggregate-changes.outputs.changed_any == 'true' && (needs.aggregate-changes.outputs.committed == 'true' || needs.aggregate-changes.outputs.tags_to_create != '0')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -129,19 +131,23 @@ jobs:
           import sys
 
           targets = json.loads(os.environ["TARGETS_JSON"])
-          changed = [
-              t for t in targets
+          # Consider targets with repository changes or missing tags so we create releases
+          # even when no new commit was required.
+          changed_or_missing = [
+              t
+              for t in targets
               if str(t.get("changed", "false")).lower() == "true"
+              or str(t.get("tag_exists", "true")).lower() == "false"
           ]
-          if not changed:
+          if not changed_or_missing:
               print("")
               sys.exit(0)
 
           # Stable ordering by workdir then name to keep tag deterministic
-          changed.sort(key=lambda t: ((t.get("workdir") or "").lower(), (t.get("name") or "").lower()))
+          changed_or_missing.sort(key=lambda t: ((t.get("workdir") or "").lower(), (t.get("name") or "").lower()))
 
           segments = []
-          for target in changed:
+          for target in changed_or_missing:
               docker_tag = target.get("docker_tag") or target.get("proposed_tag")
               if not docker_tag:
                   continue
