@@ -17,6 +17,8 @@ if ! command -v "${ACT_BIN}" >/dev/null 2>&1; then
   exit 1
 fi
 
+echo "Using ACT_IMAGE=${ACT_IMAGE}"
+
 reset_fixtures() {
   cat > "${ROOT}/tests/workflows/fixtures/workdir/Dockerfile" <<'DOCKERFILE'
 FROM alpine:3.22

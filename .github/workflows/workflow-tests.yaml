@@ -7,6 +7,8 @@ on:
 jobs:
   act-workflow-tests:
     runs-on: ubuntu-latest
+    env:
+      ACT_IMAGE: ghcr.io/catthehacker/ubuntu:full-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install act
@@ -16,5 +18,11 @@ jobs:
           curl -sSL https://github.com/nektos/act/releases/latest/download/act_Linux_x86_64.tar.gz \
             | tar -xz -C "$install_dir" act
           echo "$install_dir" >> "$GITHUB_PATH"
+      - name: Docker preflight
+        run: |
+          docker version
+          docker info
+          docker pull "$ACT_IMAGE"
+          docker run --rm "$ACT_IMAGE" /bin/true
       - name: Run workflow harness
         run: tests/workflows/run.sh
