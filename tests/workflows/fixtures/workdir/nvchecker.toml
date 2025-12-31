@@ -1,0 +1,7 @@
+[__config__]
+oldver = "old_ver.json"
+newver = "new_ver.json"
+
+[sample]
+source = "manual"
+version = "2.3.4"

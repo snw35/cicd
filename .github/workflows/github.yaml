@@ -4,6 +4,7 @@ env:
   NVCHECKER_VERSION: 2.19
   DFUPDATE_VERSION: 2.2.2
   GH_TOKEN: ${{ github.token }}
+  CICD_TEST_MODE: ${{ inputs.CICD_TEST_MODE }}
 
 # Provide inputs that control image tagging
 on:
@@ -41,6 +42,10 @@ on:
         required: false
         type: string
         default: .
+      CICD_TEST_MODE:
+        required: false
+        type: string
+        default: ""
 
 jobs:
 
@@ -63,7 +68,7 @@ jobs:
   # Run nvchecker/dfupdate, build/push when needed, and package artifacts per target.
   container-update:
     name: Automated container update (${{ matrix.target.name }})
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.CICD_TEST_MODE == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -84,15 +89,45 @@ jobs:
       - run: echo "IMAGE_TAG=${{ matrix.target.image_tag || inputs.IMAGE_TAG }}" >> "$GITHUB_ENV"
       - run: env | sort
       - run: df -h
-      - run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
+      - name: Run nvchecker (test mode)
+        if: env.CICD_TEST_MODE == 'true'
+        run: |
+          "${GITHUB_WORKSPACE}/tests/workflows/stubs/nvchecker.sh"
         working-directory: ${{ env.WORKDIR }}
-      - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
+      - name: Run nvchecker
+        if: env.CICD_TEST_MODE != 'true'
+        run: docker run --rm --name nvchecker --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
+        working-directory: ${{ env.WORKDIR }}
+      - name: Run dfupdate (test mode)
+        if: env.CICD_TEST_MODE == 'true'
+        run: |
+          "${GITHUB_WORKSPACE}/tests/workflows/stubs/dfupdate.sh"
+        working-directory: ${{ env.WORKDIR }}
+      - name: Run dfupdate
+        if: env.CICD_TEST_MODE != 'true'
+        run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
+        working-directory: ${{ env.WORKDIR }}
+      - name: Sync version snapshot
+        run: |
+          if [ -f new_ver.json ]; then
+            if [ "${CICD_TEST_MODE:-}" = "true" ]; then
+              cp new_ver.json old_ver.json
+            else
+              sudo cp new_ver.json old_ver.json
+            fi
+            owner="$(id -u):$(id -g)"
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chown "${owner}" old_ver.json
+            else
+              chown "${owner}" old_ver.json
+            fi
+          fi
         working-directory: ${{ env.WORKDIR }}
       - name: Sync version snapshot
         run: |
           if [ -f new_ver.json ]; then
             sudo cp new_ver.json old_ver.json
-            sudo chown runner:runner old_ver.json
+            sudo chown "$(id -u):$(id -g)" old_ver.json
           fi
         working-directory: ${{ env.WORKDIR }}
       - id: check_changes
@@ -104,14 +139,16 @@ jobs:
             echo "Repository changes detected."
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
-      - run: sudo chown runner:runner Dockerfile
+      - run: sudo chown "$(id -u):$(id -g)" Dockerfile
+        if: env.CICD_TEST_MODE != 'true'
         working-directory: ${{ env.WORKDIR }}
       - run: |
           if [ -f new_ver.json ]; then
-            sudo chown runner:runner new_ver.json
+            sudo chown "$(id -u):$(id -g)" new_ver.json
           fi
+        if: env.CICD_TEST_MODE != 'true'
         working-directory: ${{ env.WORKDIR }}
-      - run: pip3 install dockerfile-parse
+      - run: pip3 install dockerfile-parse --break-system-packages
       - run: |
           BASE_VERSION=$(python3 - <<'PY'
           from dockerfile_parse import DockerfileParser
@@ -246,6 +283,11 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
       - id: check_tags
         run: |
+          if [ "${CICD_TEST_MODE:-}" = "true" ]; then
+            echo "Docker tag forced missing in test mode."
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           repo_url="https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           if [ "$(git ls-remote --tags "$repo_url" "${DOCKER_TAG}" | wc -l)" -eq 0 ]; then
             echo "Docker tag does not exist on remote."
@@ -264,30 +306,30 @@ jobs:
           } >> "$GITHUB_ENV"
       - run: env | sort
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false')
       - run: git clone --depth 1 https://github.com/docker-library/official-images.git ~/official-images
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false')
       - run: rm -rf /opt/hostedtoolcache
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false')
       - run: df -h
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false')
       - run: docker build -t "$IMAGE" .
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false')
         working-directory: ${{ env.WORKDIR }}
       - run: ~/official-images/test/run.sh "$IMAGE" || exit 1;
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false')
       - run: docker push "$IMAGE"
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false')
       - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:${WORKDIR}"
-        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.WORKDIR != '' && env.WORKDIR != '.'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.WORKDIR != '' && env.WORKDIR != '.'
       - run: docker push "${GITHUB_REPOSITORY}:${WORKDIR}"
-        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.WORKDIR != '' && env.WORKDIR != '.'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.WORKDIR != '' && env.WORKDIR != '.'
       - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:latest"
-        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && (env.WORKDIR == '' || env.WORKDIR == '.')
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && (env.WORKDIR == '' || env.WORKDIR == '.')
       - run: docker push "${GITHUB_REPOSITORY}:latest"
-        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && (env.WORKDIR == '' || env.WORKDIR == '.')
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && (env.WORKDIR == '' || env.WORKDIR == '.')
       - run: docker images
-        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        if: env.CICD_TEST_MODE != 'true' && (env.CHANGED == 'true' || env.TAG_EXISTS == 'false')
       - name: Stage and package repository changes
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         run: |
@@ -317,7 +359,24 @@ jobs:
             "image": "${IMAGE}"
           }
           EOF
+      - name: Verify version snapshot (test mode)
+        if: env.CICD_TEST_MODE == 'true'
+        run: |
+          if [ ! -f new_ver.json ]; then
+            echo "new_ver.json missing in test mode" >&2
+            exit 1
+          fi
+          if [ ! -f old_ver.json ]; then
+            echo "old_ver.json missing in test mode" >&2
+            exit 1
+          fi
+          if ! cmp -s new_ver.json old_ver.json; then
+            echo "old_ver.json does not match new_ver.json in test mode" >&2
+            exit 1
+          fi
+        working-directory: ${{ env.WORKDIR }}
       - uses: actions/upload-artifact@v4
+        if: env.CICD_TEST_MODE != 'true'
         with:
           name: update-${{ env.TARGET_SLUG }}-${{ github.run_attempt }}
           path: |
@@ -329,7 +388,7 @@ jobs:
     name: Collect metadata
     needs: container-update
     if: >
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.CICD_TEST_MODE == 'true')
       && needs.container-update.result != 'failure'
     runs-on: ubuntu-latest
     permissions:
@@ -342,6 +401,7 @@ jobs:
       targets_json: ${{ steps.collect.outputs.targets_json }}
     steps:
       - uses: actions/download-artifact@v4
+        if: env.CICD_TEST_MODE != 'true'
         with:
           pattern: update-*-${{ github.run_attempt }}
           path: /tmp/updates

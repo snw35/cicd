@@ -1,0 +1,9 @@
+{
+  "inputs": {
+    "WORKDIR": "tests/workflows/fixtures/workdir",
+    "IMAGE_TAG": "",
+    "TAG_COMMAND": "",
+    "TARGETS_JSON": "",
+    "CICD_TEST_MODE": "true"
+  }
+}
