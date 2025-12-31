@@ -8,11 +8,15 @@ jobs:
   act-workflow-tests:
     runs-on: ubuntu-latest
     env:
-      ACT_IMAGE: ghcr.io/catthehacker/ubuntu:full-latest
+      ACT_IMAGE: ghcr.io/catthehacker/ubuntu:act-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Free Up Space
-        run: rm -rf /opt/hostedtoolcache
+      - name: Free disk space for act
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /opt/hostedtoolcache
+          sudo rm -rf /usr/local/lib/node_modules || true
+          docker system prune -af || true
+          df -h
       - name: Install act
         run: |
           install_dir="$HOME/.local/bin"
