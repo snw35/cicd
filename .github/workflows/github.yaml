@@ -46,6 +46,16 @@ on:
         required: false
         type: string
         default: ""
+      CICD_REPO:
+        required: false
+        type: string
+        default: ""
+        description: Repository containing CICD helper scripts (owner/repo).
+      CICD_REF:
+        required: false
+        type: string
+        default: ""
+        description: Ref (branch or tag) for CICD helper scripts.
 
 jobs:
 
@@ -84,12 +94,21 @@ jobs:
       - name: Resolve CICD workflow ref
         run: |
           workflow_ref="${{ github.workflow_ref }}"
-          if [ -n "${workflow_ref}" ]; then
-            repo="${workflow_ref%%/.github/workflows/*}"
-            ref="${workflow_ref##*@}"
-          else
-            repo="${GITHUB_REPOSITORY}"
-            ref="${GITHUB_REF_NAME}"
+          input_repo="${{ inputs.CICD_REPO }}"
+          input_ref="${{ inputs.CICD_REF }}"
+          repo="${input_repo}"
+          ref="${input_ref}"
+          if [ -z "${repo}" ]; then
+            repo="snw35/cicd"
+          fi
+          if [ -z "${ref}" ]; then
+            if [ -n "${workflow_ref}" ]; then
+              ref="${workflow_ref##*@}"
+            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+              ref="${GITHUB_REF_NAME}"
+            else
+              ref="mainline"
+            fi
           fi
           {
             echo "CICD_REPO=${repo}"
@@ -350,12 +369,21 @@ jobs:
       - name: Resolve CICD workflow ref
         run: |
           workflow_ref="${{ github.workflow_ref }}"
-          if [ -n "${workflow_ref}" ]; then
-            repo="${workflow_ref%%/.github/workflows/*}"
-            ref="${workflow_ref##*@}"
-          else
-            repo="${GITHUB_REPOSITORY}"
-            ref="${GITHUB_REF_NAME}"
+          input_repo="${{ inputs.CICD_REPO }}"
+          input_ref="${{ inputs.CICD_REF }}"
+          repo="${input_repo}"
+          ref="${input_ref}"
+          if [ -z "${repo}" ]; then
+            repo="snw35/cicd"
+          fi
+          if [ -z "${ref}" ]; then
+            if [ -n "${workflow_ref}" ]; then
+              ref="${workflow_ref##*@}"
+            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+              ref="${GITHUB_REF_NAME}"
+            else
+              ref="mainline"
+            fi
           fi
           {
             echo "CICD_REPO=${repo}"
