@@ -346,6 +346,7 @@ jobs:
       images: ${{ steps.collect.outputs.images }}
       targets_json: ${{ steps.collect.outputs.targets_json }}
     steps:
+      - uses: actions/checkout@v4
       - name: Resolve CICD workflow ref
         run: |
           workflow_ref="${{ github.workflow_ref }}"
