@@ -59,10 +59,12 @@ jobs:
             repo="${GITHUB_REPOSITORY}"
             ref="${GITHUB_REF_NAME}"
           fi
-          echo "CICD_REPO=${repo}" >> "$GITHUB_ENV"
-          echo "CICD_REF=${ref}" >> "$GITHUB_ENV"
-          echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd" >> "$GITHUB_ENV"
-          echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts" >> "$GITHUB_ENV"
+          {
+            echo "CICD_REPO=${repo}"
+            echo "CICD_REF=${ref}"
+            echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
+            echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
+          } >> "$GITHUB_ENV"
       - name: Checkout CICD scripts
         uses: actions/checkout@v4
         with:
@@ -158,10 +160,12 @@ jobs:
             repo="${GITHUB_REPOSITORY}"
             ref="${GITHUB_REF_NAME}"
           fi
-          echo "CICD_REPO=${repo}" >> "$GITHUB_ENV"
-          echo "CICD_REF=${ref}" >> "$GITHUB_ENV"
-          echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd" >> "$GITHUB_ENV"
-          echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts" >> "$GITHUB_ENV"
+          {
+            echo "CICD_REPO=${repo}"
+            echo "CICD_REF=${ref}"
+            echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
+            echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts" 
+          } >> "$GITHUB_ENV"
       - name: Checkout CICD scripts
         uses: actions/checkout@v4
         with:
