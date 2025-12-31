@@ -127,7 +127,7 @@ jobs:
         run: |
           if [ -f new_ver.json ]; then
             sudo cp new_ver.json old_ver.json
-            sudo chown runner:runner old_ver.json
+            sudo chown "$(id -u):$(id -g)" old_ver.json
           fi
         working-directory: ${{ env.WORKDIR }}
       - id: check_changes
