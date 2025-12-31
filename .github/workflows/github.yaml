@@ -148,6 +148,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
           path: .cicd
           fetch-depth: 1
+      - name: Ignore CICD helper checkout
+        if: env.CICD_NEED_CHECKOUT == 'true'
+        run: |
+          exclude_file="${GITHUB_WORKSPACE}/.git/info/exclude"
+          if [ -f "${exclude_file}" ] && ! grep -qx "/.cicd/" "${exclude_file}"; then
+            echo "/.cicd/" >> "${exclude_file}"
+          fi
       - name: Compute target slug
         run: |
           TARGET_SLUG=$(echo "${TARGET_NAME}" | tr '/.' '-')
