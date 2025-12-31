@@ -148,7 +148,7 @@ jobs:
           fi
         if: env.CICD_TEST_MODE != 'true'
         working-directory: ${{ env.WORKDIR }}
-      - run: pip3 install dockerfile-parse
+      - run: pip3 install dockerfile-parse --break-system-packages
       - run: |
           BASE_VERSION=$(python3 - <<'PY'
           from dockerfile_parse import DockerfileParser
