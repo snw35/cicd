@@ -50,6 +50,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
+        if: env.CICD_TEST_MODE != 'true'
         with:
           pattern: update-*-${{ github.run_attempt }}
           path: /tmp/updates

@@ -376,6 +376,7 @@ jobs:
           fi
         working-directory: ${{ env.WORKDIR }}
       - uses: actions/upload-artifact@v4
+        if: env.CICD_TEST_MODE != 'true'
         with:
           name: update-${{ env.TARGET_SLUG }}-${{ github.run_attempt }}
           path: |
@@ -400,6 +401,7 @@ jobs:
       targets_json: ${{ steps.collect.outputs.targets_json }}
     steps:
       - uses: actions/download-artifact@v4
+        if: env.CICD_TEST_MODE != 'true'
         with:
           pattern: update-*-${{ github.run_attempt }}
           path: /tmp/updates
