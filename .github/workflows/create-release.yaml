@@ -63,8 +63,16 @@ jobs:
             echo "CICD_TEST_FIXTURES_DIR not set in test mode" >&2
             exit 1
           fi
+          fixtures_dir="${CICD_TEST_FIXTURES_DIR}"
+          if [ ! -d "${fixtures_dir}" ]; then
+            fixtures_dir="${GITHUB_WORKSPACE}/${CICD_TEST_FIXTURES_DIR}"
+          fi
+          if [ ! -d "${fixtures_dir}/updates" ]; then
+            echo "Fixture updates directory not found: ${fixtures_dir}/updates" >&2
+            exit 1
+          fi
           mkdir -p /tmp/updates
-          cp "${CICD_TEST_FIXTURES_DIR}/updates/"* /tmp/updates/
+          cp "${fixtures_dir}/updates/"* /tmp/updates/
       - id: collect
         run: |
           python <<'PY'
