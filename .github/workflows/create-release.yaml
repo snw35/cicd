@@ -49,6 +49,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Resolve CICD workflow ref
+        run: |
+          workflow_ref="${{ github.workflow_ref }}"
+          if [ -n "${workflow_ref}" ]; then
+            repo="${workflow_ref%%/.github/workflows/*}"
+            ref="${workflow_ref##*@}"
+          else
+            repo="${GITHUB_REPOSITORY}"
+            ref="${GITHUB_REF_NAME}"
+          fi
+          echo "CICD_REPO=${repo}" >> "$GITHUB_ENV"
+          echo "CICD_REF=${ref}" >> "$GITHUB_ENV"
+          echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd" >> "$GITHUB_ENV"
+          echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts" >> "$GITHUB_ENV"
+      - name: Checkout CICD scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CICD_REPO }}
+          ref: ${{ env.CICD_REF }}
+          path: .cicd
+          fetch-depth: 1
       - uses: actions/download-artifact@v4
         if: env.CICD_TEST_MODE != 'true'
         with:
@@ -78,38 +99,7 @@ jobs:
           mkdir -p /tmp/updates
           cp "${fixtures_dir}/updates/"* /tmp/updates/
       - id: collect
-        run: |
-          python <<'PY'
-          import glob
-          import json
-          import os
-
-          metas = glob.glob(os.path.join("/tmp/updates", "*-meta.json"))
-          targets = []
-          for meta_file in metas:
-            with open(meta_file, "r", encoding="utf-8") as handle:
-              meta = json.load(handle)
-            meta["changed"] = str(meta.get("changed", "false")).lower() == "true"
-            meta["tag_exists"] = str(meta.get("tag_exists", "false")).lower() == "true"
-            targets.append(meta)
-
-          changed_any = any(t["changed"] or not t["tag_exists"] for t in targets)
-          docker_tags = {t.get("name"): t.get("docker_tag", "") for t in targets}
-          proposed_tags = {t.get("name"): t.get("proposed_tag", "") for t in targets}
-          images = {t.get("name"): t.get("image", "") for t in targets}
-          tags_to_create = [t.get("proposed_tag") for t in targets if t.get("proposed_tag") and not t["tag_exists"]]
-
-          output = os.environ["GITHUB_OUTPUT"]
-          with open(output, "a", encoding="utf-8") as handle:
-            handle.write(f"meta_found={str(len(targets) > 0).lower()}\n")
-            handle.write(f"changed_any={str(changed_any).lower()}\n")
-            handle.write(f"targets_json={json.dumps(targets)}\n")
-            handle.write(f"docker_tags={json.dumps(docker_tags)}\n")
-            handle.write(f"proposed_tags={json.dumps(proposed_tags)}\n")
-            handle.write(f"images={json.dumps(images)}\n")
-            handle.write(f"tags_to_create={len(tags_to_create)}\n")
-            handle.write(f"tag_names={json.dumps(tags_to_create)}\n")
-          PY
+        run: python3 "$CICD_SCRIPTS_DIR/collect_updates.py"
       - name: Apply aggregated patches
         if: steps.collect.outputs.meta_found == 'true'
         run: |
@@ -158,43 +148,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Resolve CICD workflow ref
+        run: |
+          workflow_ref="${{ github.workflow_ref }}"
+          if [ -n "${workflow_ref}" ]; then
+            repo="${workflow_ref%%/.github/workflows/*}"
+            ref="${workflow_ref##*@}"
+          else
+            repo="${GITHUB_REPOSITORY}"
+            ref="${GITHUB_REF_NAME}"
+          fi
+          echo "CICD_REPO=${repo}" >> "$GITHUB_ENV"
+          echo "CICD_REF=${ref}" >> "$GITHUB_ENV"
+          echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd" >> "$GITHUB_ENV"
+          echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts" >> "$GITHUB_ENV"
+      - name: Checkout CICD scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CICD_REPO }}
+          ref: ${{ env.CICD_REF }}
+          path: .cicd
+          fetch-depth: 1
       - name: Pick combined release tag from changed targets
         id: pick_tag
         env:
           TARGETS_JSON: ${{ needs.aggregate-changes.outputs.targets_json != '' && needs.aggregate-changes.outputs.targets_json || inputs.targets_json }}
         run: |
-          tag="$(python3 - <<'PY'
-          import json
-          import os
-          import sys
-
-          targets = json.loads(os.environ["TARGETS_JSON"])
-          changed = [
-              t for t in targets
-              if str(t.get("changed", "false")).lower() == "true"
-              or str(t.get("tag_exists", "false")).lower() != "true"
-          ]
-          if not changed:
-              print("")
-              sys.exit(0)
-
-          # Stable ordering by workdir then name to keep tag deterministic
-          changed.sort(key=lambda t: ((t.get("workdir") or "").lower(), (t.get("name") or "").lower()))
-
-          segments = []
-          for target in changed:
-              docker_tag = target.get("docker_tag") or target.get("proposed_tag")
-              if not docker_tag:
-                  continue
-              segments.append(docker_tag)
-
-          if not segments:
-              print("")
-              sys.exit(0)
-
-          print("-".join(segments))
-          PY
-          )"
+          tag="$(python3 "$CICD_SCRIPTS_DIR/pick_release_tag.py")"
           if [ -n "$tag" ]; then
             echo "tag=$tag" >> "$GITHUB_OUTPUT"
           else

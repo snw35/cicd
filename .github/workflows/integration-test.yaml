@@ -19,33 +19,36 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve CICD workflow ref
+        run: |
+          workflow_ref="${{ github.workflow_ref }}"
+          if [ -n "${workflow_ref}" ]; then
+            repo="${workflow_ref%%/.github/workflows/*}"
+            ref="${workflow_ref##*@}"
+          else
+            repo="${GITHUB_REPOSITORY}"
+            ref="${GITHUB_REF_NAME}"
+          fi
+          echo "CICD_REPO=${repo}" >> "$GITHUB_ENV"
+          echo "CICD_REF=${ref}" >> "$GITHUB_ENV"
+          echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd" >> "$GITHUB_ENV"
+          echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts" >> "$GITHUB_ENV"
+      - name: Checkout CICD scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CICD_REPO }}
+          ref: ${{ env.CICD_REF }}
+          path: .cicd
+          fetch-depth: 1
 
       - name: Install dependencies for helper script
         run: pip3 install dockerfile-parse pyyaml --break-system-packages
 
       - name: Import versions from main workflow
         run: |
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          import yaml
-
-          workflow = Path(".github/workflows/github.yaml")
-          data = yaml.safe_load(workflow.read_text())
-          env = data.get("env", {})
-          keys = ("NVCHECKER_VERSION", "DFUPDATE_VERSION")
-
-          missing = [k for k in keys if k not in env]
-          if missing:
-            raise SystemExit(f"Missing keys in main workflow env: {', '.join(missing)}")
-
-          env_file = os.environ["GITHUB_ENV"]
-          print(f"Writing versions to {env_file}")
-          with open(env_file, "a", encoding="utf-8") as fh:
-            for key in keys:
-              fh.write(f"{key}={env[key]}\n")
-              print(f"export {key}={env[key]}")
-          PY
+          python3 "$CICD_SCRIPTS_DIR/export_workflow_env.py" \
+            --workflow "$CICD_REPO_DIR/.github/workflows/github.yaml" \
+            --keys NVCHECKER_VERSION DFUPDATE_VERSION
 
       - name: Show imported versions
         run: |
@@ -87,46 +90,7 @@ jobs:
         working-directory: integration-test
         run: |
           EXPECTED="$(cat version.txt)"
-          UPDATED="$(python3 - <<'PY'
-          from dockerfile_parse import DockerfileParser
-          from dockerfile_parse.util import extract_key_values
-
-          name = "SAMPLE_VERSION"
-          parser = DockerfileParser(path="Dockerfile")
-
-          envs = {}
-          stage_envs = {}
-          stage_args = {}
-          global_args = {}
-          in_stage = False
-
-          for instruction in parser.structure:
-              inst = instruction.get("instruction")
-              val = instruction.get("value")
-
-              if inst == "FROM":
-                  in_stage = True
-                  stage_envs = {}
-                  stage_args = {}
-              elif inst == "ARG":
-                  for key, arg_val in extract_key_values(False, stage_args, stage_envs, val):
-                      if in_stage:
-                          if key in global_args:
-                              arg_val = global_args[key]
-                          stage_args[key] = arg_val
-                      else:
-                          global_args[key] = arg_val
-              elif inst == "ENV":
-                  for key, env_val in extract_key_values(True, stage_args, stage_envs, val):
-                      stage_envs[key] = env_val
-                      envs[key] = env_val
-
-          value = envs.get(name)
-          if value is None:
-              raise SystemExit(f"Environment variable '{name}' not found in Dockerfile")
-          print(value)
-          PY
-          )"
+          UPDATED="$(python3 "$CICD_SCRIPTS_DIR/dockerfile_envs.py" get SAMPLE_VERSION)"
           echo "Expected SAMPLE_VERSION=${EXPECTED}"
           echo "Updated SAMPLE_VERSION=${UPDATED}"
           if [ "${UPDATED}" != "${EXPECTED}" ]; then
