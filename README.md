@@ -64,12 +64,17 @@ jobs:
     with:
       WORKDIR: ${{ matrix.workdir }}
       IMAGE_TAG: CONFD_VERSION
+      CICD_REPO: snw35/cicd
+      CICD_REF: mainline
     secrets: inherit
 
   create-release:
     needs: update-images
     if: github.ref_name == github.event.repository.default_branch && needs.update-images.outputs.changed == 'true'
     uses: snw35/cicd/.github/workflows/create-release.yaml@mainline
+    with:
+      CICD_REPO: snw35/cicd
+      CICD_REF: mainline
     secrets: inherit
 ```
 

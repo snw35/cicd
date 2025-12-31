@@ -46,6 +46,16 @@ on:
         required: false
         type: string
         default: ""
+      CICD_REPO:
+        required: false
+        type: string
+        default: ""
+        description: Repository containing CICD helper scripts (owner/repo).
+      CICD_REF:
+        required: false
+        type: string
+        default: ""
+        description: Ref (branch or tag) for CICD helper scripts.
 
 jobs:
 
@@ -81,6 +91,70 @@ jobs:
       TARGET_NAME: ${{ matrix.target.name }}
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve CICD workflow ref
+        run: |
+          workflow_ref="${{ github.workflow_ref }}"
+          input_repo="${{ inputs.CICD_REPO }}"
+          input_ref="${{ inputs.CICD_REF }}"
+          repo="${input_repo}"
+          ref="${input_ref}"
+          if [ -z "${repo}" ]; then
+            repo="snw35/cicd"
+          fi
+          if [ -z "${ref}" ]; then
+            if [ -n "${workflow_ref}" ]; then
+              ref="${workflow_ref##*@}"
+            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+              ref="${GITHUB_REF_NAME}"
+            else
+              ref="mainline"
+            fi
+          fi
+          {
+            echo "CICD_REPO=${repo}"
+            echo "CICD_REF=${ref}"
+          } >> "$GITHUB_ENV"
+          scripts_dir=""
+          repo_dir=""
+          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+            repo_dir="${GITHUB_WORKSPACE}"
+            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
+          elif [ -d "/github/workspace/.github/scripts" ]; then
+            repo_dir="/github/workspace"
+            scripts_dir="/github/workspace/.github/scripts"
+          elif [ -d "$(pwd)/.github/scripts" ]; then
+            repo_dir="$(pwd)"
+            scripts_dir="$(pwd)/.github/scripts"
+          fi
+          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+            {
+              echo "CICD_REPO_DIR=${repo_dir}"
+              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
+              echo "CICD_NEED_CHECKOUT=false"
+            } >> "$GITHUB_ENV"
+          else
+            {
+              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
+              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
+              echo "CICD_NEED_CHECKOUT=true"
+            } >> "$GITHUB_ENV"
+          fi
+      - name: Checkout CICD scripts
+        uses: actions/checkout@v4
+        if: env.CICD_NEED_CHECKOUT == 'true'
+        with:
+          repository: ${{ env.CICD_REPO }}
+          ref: ${{ env.CICD_REF }}
+          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
+          path: .cicd
+          fetch-depth: 1
+      - name: Ignore CICD helper checkout
+        if: env.CICD_NEED_CHECKOUT == 'true'
+        run: |
+          exclude_file="${GITHUB_WORKSPACE}/.git/info/exclude"
+          if [ -f "${exclude_file}" ] && ! grep -qx "/.cicd/" "${exclude_file}"; then
+            echo "/.cicd/" >> "${exclude_file}"
+          fi
       - name: Compute target slug
         run: |
           TARGET_SLUG=$(echo "${TARGET_NAME}" | tr '/.' '-')
@@ -110,24 +184,19 @@ jobs:
       - name: Sync version snapshot
         run: |
           if [ -f new_ver.json ]; then
+            owner="$(id -u):$(id -g)"
             if [ "${CICD_TEST_MODE:-}" = "true" ]; then
               cp new_ver.json old_ver.json
-            else
-              sudo cp new_ver.json old_ver.json
-            fi
-            owner="$(id -u):$(id -g)"
-            if command -v sudo >/dev/null 2>&1; then
-              sudo chown "${owner}" old_ver.json
-            else
               chown "${owner}" old_ver.json
+            else
+              if command -v sudo >/dev/null 2>&1; then
+                sudo cp new_ver.json old_ver.json
+                sudo chown "${owner}" old_ver.json
+              else
+                cp new_ver.json old_ver.json
+                chown "${owner}" old_ver.json
+              fi
             fi
-          fi
-        working-directory: ${{ env.WORKDIR }}
-      - name: Sync version snapshot
-        run: |
-          if [ -f new_ver.json ]; then
-            sudo cp new_ver.json old_ver.json
-            sudo chown "$(id -u):$(id -g)" old_ver.json
           fi
         working-directory: ${{ env.WORKDIR }}
       - id: check_changes
@@ -150,65 +219,11 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
       - run: pip3 install dockerfile-parse --break-system-packages
       - run: |
-          BASE_VERSION=$(python3 - <<'PY'
-          from dockerfile_parse import DockerfileParser
-
-          parser = DockerfileParser(path="Dockerfile")
-          base = (parser.baseimage or "").strip()
-          if not base:
-              raise SystemExit("No base image found in Dockerfile")
-
-          image_no_digest = base.split("@", 1)[0]
-          slash = image_no_digest.rfind("/")
-          colon = image_no_digest.rfind(":")
-          tag = image_no_digest[colon + 1 :] if colon > slash else "latest"
-          print(tag)
-          PY
-          )
+          BASE_VERSION=$(python3 "$CICD_SCRIPTS_DIR/dockerfile_base_tag.py")
           echo "BASE_VERSION=${BASE_VERSION}" >> "$GITHUB_ENV"
         working-directory: ${{ env.WORKDIR }}
       - run: |
-          # Collect ENV values across all Dockerfile stages (DockerfileParser.envs only returns the final stage).
-          ENV_VERSIONS=$(python3 - <<'PY'
-          from dockerfile_parse import DockerfileParser
-          from dockerfile_parse.util import extract_key_values
-
-          def collect_envs(path="Dockerfile"):
-              parser = DockerfileParser(path=path)
-              envs = {}
-              stage_envs = {}
-              stage_args = {}
-              global_args = {}
-              in_stage = False
-
-              for instruction in parser.structure:
-                  name = instruction.get("instruction")
-                  value = instruction.get("value")
-
-                  if name == "FROM":
-                      in_stage = True
-                      stage_envs = {}
-                      stage_args = {}
-                  elif name == "ARG":
-                      for key, val in extract_key_values(False, stage_args, stage_envs, value):
-                          if in_stage:
-                              if key in global_args:
-                                  val = global_args[key]
-                              stage_args[key] = val
-                          else:
-                              global_args[key] = val
-                  elif name == "ENV":
-                      for key, val in extract_key_values(True, stage_args, stage_envs, value):
-                          stage_envs[key] = val
-                          envs[key] = val
-
-              return envs
-
-          suffix = "_VERSION"
-          versions = [value for key, value in collect_envs().items() if key.endswith(suffix)]
-          print("-".join(versions))
-          PY
-          )
+          ENV_VERSIONS=$(python3 "$CICD_SCRIPTS_DIR/dockerfile_envs.py" versions)
           echo "ENV_VERSIONS=${ENV_VERSIONS}" >> "$GITHUB_ENV"
         working-directory: ${{ env.WORKDIR }}
       - run: |
@@ -221,50 +236,7 @@ jobs:
           if [[ -z "${IMAGE_TAG}" ]]; then
             echo "DOCKER_TAG=$PROPOSED_TAG" >> "$GITHUB_ENV"
           else
-            IMAGE_TAG_VALUE=$(python3 - "${IMAGE_TAG}" <<'PY'
-          import sys
-          from dockerfile_parse import DockerfileParser
-          from dockerfile_parse.util import extract_key_values
-
-          name = sys.argv[1]
-
-          def collect_envs(path="Dockerfile"):
-              parser = DockerfileParser(path=path)
-              envs = {}
-              stage_envs = {}
-              stage_args = {}
-              global_args = {}
-              in_stage = False
-
-              for instruction in parser.structure:
-                  inst = instruction.get("instruction")
-                  value = instruction.get("value")
-
-                  if inst == "FROM":
-                      in_stage = True
-                      stage_envs = {}
-                      stage_args = {}
-                  elif inst == "ARG":
-                      for key, val in extract_key_values(False, stage_args, stage_envs, value):
-                          if in_stage:
-                              if key in global_args:
-                                  val = global_args[key]
-                              stage_args[key] = val
-                          else:
-                              global_args[key] = val
-                  elif inst == "ENV":
-                      for key, val in extract_key_values(True, stage_args, stage_envs, value):
-                          stage_envs[key] = val
-                          envs[key] = val
-
-              return envs
-
-          value = collect_envs().get(name)
-          if value is None:
-              sys.exit(f"Environment variable '{name}' not found in Dockerfile")
-          print(value)
-          PY
-            )
+            IMAGE_TAG_VALUE=$(python3 "$CICD_SCRIPTS_DIR/dockerfile_envs.py" get "${IMAGE_TAG}")
             if [[ ${{ env.WORKDIR }} == '.' ]]; then
               echo "DOCKER_TAG=${IMAGE_TAG_VALUE}" >> "$GITHUB_ENV"
             else
@@ -400,6 +372,64 @@ jobs:
       images: ${{ steps.collect.outputs.images }}
       targets_json: ${{ steps.collect.outputs.targets_json }}
     steps:
+      - uses: actions/checkout@v4
+      - name: Resolve CICD workflow ref
+        run: |
+          workflow_ref="${{ github.workflow_ref }}"
+          input_repo="${{ inputs.CICD_REPO }}"
+          input_ref="${{ inputs.CICD_REF }}"
+          repo="${input_repo}"
+          ref="${input_ref}"
+          if [ -z "${repo}" ]; then
+            repo="snw35/cicd"
+          fi
+          if [ -z "${ref}" ]; then
+            if [ -n "${workflow_ref}" ]; then
+              ref="${workflow_ref##*@}"
+            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+              ref="${GITHUB_REF_NAME}"
+            else
+              ref="mainline"
+            fi
+          fi
+          {
+            echo "CICD_REPO=${repo}"
+            echo "CICD_REF=${ref}"
+          } >> "$GITHUB_ENV"
+          scripts_dir=""
+          repo_dir=""
+          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+            repo_dir="${GITHUB_WORKSPACE}"
+            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
+          elif [ -d "/github/workspace/.github/scripts" ]; then
+            repo_dir="/github/workspace"
+            scripts_dir="/github/workspace/.github/scripts"
+          elif [ -d "$(pwd)/.github/scripts" ]; then
+            repo_dir="$(pwd)"
+            scripts_dir="$(pwd)/.github/scripts"
+          fi
+          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+            {
+              echo "CICD_REPO_DIR=${repo_dir}"
+              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
+              echo "CICD_NEED_CHECKOUT=false"
+            } >> "$GITHUB_ENV"
+          else
+            {
+              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
+              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
+              echo "CICD_NEED_CHECKOUT=true"
+            } >> "$GITHUB_ENV"
+          fi
+      - name: Checkout CICD scripts
+        uses: actions/checkout@v4
+        if: env.CICD_NEED_CHECKOUT == 'true'
+        with:
+          repository: ${{ env.CICD_REPO }}
+          ref: ${{ env.CICD_REF }}
+          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
+          path: .cicd
+          fetch-depth: 1
       - uses: actions/download-artifact@v4
         if: env.CICD_TEST_MODE != 'true'
         with:
@@ -408,35 +438,4 @@ jobs:
           merge-multiple: true
         continue-on-error: true
       - id: collect
-        run: |
-          python <<'PY'
-          import glob
-          import json
-          import os
-
-          metas = glob.glob(os.path.join("/tmp/updates", "*-meta.json"))
-          targets = []
-          for meta_file in metas:
-            with open(meta_file, "r", encoding="utf-8") as handle:
-              meta = json.load(handle)
-            meta["changed"] = str(meta.get("changed", "false")).lower() == "true"
-            meta["tag_exists"] = str(meta.get("tag_exists", "false")).lower() == "true"
-            targets.append(meta)
-
-          changed_any = any(t["changed"] or not t["tag_exists"] for t in targets)
-          docker_tags = {t.get("name"): t.get("docker_tag", "") for t in targets}
-          proposed_tags = {t.get("name"): t.get("proposed_tag", "") for t in targets}
-          images = {t.get("name"): t.get("image", "") for t in targets}
-          tags_to_create = [t.get("proposed_tag") for t in targets if t.get("proposed_tag") and not t["tag_exists"]]
-
-          output = os.environ["GITHUB_OUTPUT"]
-          with open(output, "a", encoding="utf-8") as handle:
-            handle.write(f"meta_found={str(len(targets) > 0).lower()}\n")
-            handle.write(f"changed_any={str(changed_any).lower()}\n")
-            handle.write(f"targets_json={json.dumps(targets)}\n")
-            handle.write(f"docker_tags={json.dumps(docker_tags)}\n")
-            handle.write(f"proposed_tags={json.dumps(proposed_tags)}\n")
-            handle.write(f"images={json.dumps(images)}\n")
-            handle.write(f"tags_to_create={len(tags_to_create)}\n")
-            handle.write(f"tag_names={json.dumps(tags_to_create)}\n")
-          PY
+        run: python3 "$CICD_SCRIPTS_DIR/collect_updates.py"
