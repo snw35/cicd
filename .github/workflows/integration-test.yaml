@@ -19,54 +19,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve CICD workflow ref
-        run: |
-          workflow_ref="${{ github.workflow_ref }}"
-          if [ -n "${workflow_ref}" ]; then
-            repo="${workflow_ref%%/.github/workflows/*}"
-            ref="${workflow_ref##*@}"
-          else
-            repo="${GITHUB_REPOSITORY}"
-            ref="${GITHUB_REF_NAME}"
-          fi
-          {
-            echo "CICD_REPO=${repo}"
-            echo "CICD_REF=${ref}"
-          } >> "$GITHUB_ENV"
-          scripts_dir=""
-          repo_dir=""
-          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
-            repo_dir="${GITHUB_WORKSPACE}"
-            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
-          elif [ -d "/github/workspace/.github/scripts" ]; then
-            repo_dir="/github/workspace"
-            scripts_dir="/github/workspace/.github/scripts"
-          elif [ -d "$(pwd)/.github/scripts" ]; then
-            repo_dir="$(pwd)"
-            scripts_dir="$(pwd)/.github/scripts"
-          fi
-          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-            {
-              echo "CICD_REPO_DIR=${repo_dir}"
-              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
-              echo "CICD_NEED_CHECKOUT=false"
-            } >> "$GITHUB_ENV"
-          else
-            {
-              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
-              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
-              echo "CICD_NEED_CHECKOUT=true"
-            } >> "$GITHUB_ENV"
-          fi
-      - name: Checkout CICD scripts
-        uses: actions/checkout@v4
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        with:
-          repository: ${{ env.CICD_REPO }}
-          ref: ${{ env.CICD_REF }}
-          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
-          path: .cicd
-          fetch-depth: 1
+      - uses: ./.github/actions/resolve-cicd
 
       - name: Install dependencies for helper script
         run: pip3 install dockerfile-parse pyyaml --break-system-packages

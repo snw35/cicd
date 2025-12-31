@@ -59,70 +59,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Resolve CICD workflow ref
-        run: |
-          workflow_ref="${{ github.workflow_ref }}"
-          input_repo="${{ inputs.CICD_REPO }}"
-          input_ref="${{ inputs.CICD_REF }}"
-          repo="${input_repo}"
-          ref="${input_ref}"
-          if [ -z "${repo}" ]; then
-            repo="snw35/cicd"
-          fi
-          if [ -z "${ref}" ]; then
-            if [ -n "${workflow_ref}" ]; then
-              ref="${workflow_ref##*@}"
-            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-              ref="${GITHUB_REF_NAME}"
-            else
-              ref="mainline"
-            fi
-          fi
-          {
-            echo "CICD_REPO=${repo}"
-            echo "CICD_REF=${ref}"
-          } >> "$GITHUB_ENV"
-          scripts_dir=""
-          repo_dir=""
-          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
-            repo_dir="${GITHUB_WORKSPACE}"
-            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
-          elif [ -d "/github/workspace/.github/scripts" ]; then
-            repo_dir="/github/workspace"
-            scripts_dir="/github/workspace/.github/scripts"
-          elif [ -d "$(pwd)/.github/scripts" ]; then
-            repo_dir="$(pwd)"
-            scripts_dir="$(pwd)/.github/scripts"
-          fi
-          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-            {
-              echo "CICD_REPO_DIR=${repo_dir}"
-              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
-              echo "CICD_NEED_CHECKOUT=false"
-            } >> "$GITHUB_ENV"
-          else
-            {
-              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
-              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
-              echo "CICD_NEED_CHECKOUT=true"
-            } >> "$GITHUB_ENV"
-          fi
-      - name: Checkout CICD scripts
-        uses: actions/checkout@v4
-        if: env.CICD_NEED_CHECKOUT == 'true'
+      - uses: ./.github/actions/resolve-cicd
         with:
-          repository: ${{ env.CICD_REPO }}
-          ref: ${{ env.CICD_REF }}
-          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
-          path: .cicd
-          fetch-depth: 1
-      - name: Ignore CICD helper checkout
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        run: |
-          exclude_file="${GITHUB_WORKSPACE}/.git/info/exclude"
-          if [ -f "${exclude_file}" ] && ! grep -qx "/.cicd/" "${exclude_file}"; then
-            echo "/.cicd/" >> "${exclude_file}"
-          fi
+          cicd_repo: ${{ inputs.CICD_REPO }}
+          cicd_ref: ${{ inputs.CICD_REF }}
       - uses: actions/download-artifact@v4
         if: env.CICD_TEST_MODE != 'true'
         with:
@@ -201,63 +141,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Resolve CICD workflow ref
-        run: |
-          workflow_ref="${{ github.workflow_ref }}"
-          input_repo="${{ inputs.CICD_REPO }}"
-          input_ref="${{ inputs.CICD_REF }}"
-          repo="${input_repo}"
-          ref="${input_ref}"
-          if [ -z "${repo}" ]; then
-            repo="snw35/cicd"
-          fi
-          if [ -z "${ref}" ]; then
-            if [ -n "${workflow_ref}" ]; then
-              ref="${workflow_ref##*@}"
-            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-              ref="${GITHUB_REF_NAME}"
-            else
-              ref="mainline"
-            fi
-          fi
-          {
-            echo "CICD_REPO=${repo}"
-            echo "CICD_REF=${ref}"
-          } >> "$GITHUB_ENV"
-          scripts_dir=""
-          repo_dir=""
-          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
-            repo_dir="${GITHUB_WORKSPACE}"
-            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
-          elif [ -d "/github/workspace/.github/scripts" ]; then
-            repo_dir="/github/workspace"
-            scripts_dir="/github/workspace/.github/scripts"
-          elif [ -d "$(pwd)/.github/scripts" ]; then
-            repo_dir="$(pwd)"
-            scripts_dir="$(pwd)/.github/scripts"
-          fi
-          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-            {
-              echo "CICD_REPO_DIR=${repo_dir}"
-              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
-              echo "CICD_NEED_CHECKOUT=false"
-            } >> "$GITHUB_ENV"
-          else
-            {
-              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
-              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
-              echo "CICD_NEED_CHECKOUT=true"
-            } >> "$GITHUB_ENV"
-          fi
-      - name: Checkout CICD scripts
-        uses: actions/checkout@v4
-        if: env.CICD_NEED_CHECKOUT == 'true'
+      - uses: ./.github/actions/resolve-cicd
         with:
-          repository: ${{ env.CICD_REPO }}
-          ref: ${{ env.CICD_REF }}
-          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
-          path: .cicd
-          fetch-depth: 1
+          cicd_repo: ${{ inputs.CICD_REPO }}
+          cicd_ref: ${{ inputs.CICD_REF }}
       - name: Pick combined release tag from changed targets
         id: pick_tag
         env:
