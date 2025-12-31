@@ -69,7 +69,7 @@ jobs:
       - name: Fix Dockerfile permissions
         if: env.CICD_TEST_MODE != 'true'
         working-directory: integration-test
-        run: sudo chown runner:runner Dockerfile
+        run: sudo chown "$(id -u):$(id -g)" Dockerfile
 
       - name: Run nvchecker on sample config (test mode)
         if: env.CICD_TEST_MODE == 'true'

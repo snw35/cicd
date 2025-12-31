@@ -114,7 +114,12 @@ jobs:
               cp new_ver.json old_ver.json
             else
               sudo cp new_ver.json old_ver.json
-              sudo chown runner:runner old_ver.json
+            fi
+            owner="$(id -u):$(id -g)"
+            if command -v sudo >/dev/null 2>&1; then
+              sudo chown "${owner}" old_ver.json
+            else
+              chown "${owner}" old_ver.json
             fi
           fi
         working-directory: ${{ env.WORKDIR }}
@@ -134,12 +139,12 @@ jobs:
             echo "Repository changes detected."
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
-      - run: sudo chown runner:runner Dockerfile
+      - run: sudo chown "$(id -u):$(id -g)" Dockerfile
         if: env.CICD_TEST_MODE != 'true'
         working-directory: ${{ env.WORKDIR }}
       - run: |
           if [ -f new_ver.json ]; then
-            sudo chown runner:runner new_ver.json
+            sudo chown "$(id -u):$(id -g)" new_ver.json
           fi
         if: env.CICD_TEST_MODE != 'true'
         working-directory: ${{ env.WORKDIR }}
