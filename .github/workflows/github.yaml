@@ -94,14 +94,27 @@ jobs:
           {
             echo "CICD_REPO=${repo}"
             echo "CICD_REF=${ref}"
-            echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
-            echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
           } >> "$GITHUB_ENV"
+          if [ "${repo}" = "${GITHUB_REPOSITORY}" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+            {
+              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}"
+              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.github/scripts"
+              echo "CICD_NEED_CHECKOUT=false"
+            } >> "$GITHUB_ENV"
+          else
+            {
+              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
+              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
+              echo "CICD_NEED_CHECKOUT=true"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Checkout CICD scripts
         uses: actions/checkout@v4
+        if: env.CICD_NEED_CHECKOUT == 'true'
         with:
           repository: ${{ env.CICD_REPO }}
           ref: ${{ env.CICD_REF }}
+          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
           path: .cicd
           fetch-depth: 1
       - name: Compute target slug
@@ -334,14 +347,27 @@ jobs:
           {
             echo "CICD_REPO=${repo}"
             echo "CICD_REF=${ref}"
-            echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
-            echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
           } >> "$GITHUB_ENV"
+          if [ "${repo}" = "${GITHUB_REPOSITORY}" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+            {
+              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}"
+              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.github/scripts"
+              echo "CICD_NEED_CHECKOUT=false"
+            } >> "$GITHUB_ENV"
+          else
+            {
+              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
+              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
+              echo "CICD_NEED_CHECKOUT=true"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Checkout CICD scripts
         uses: actions/checkout@v4
+        if: env.CICD_NEED_CHECKOUT == 'true'
         with:
           repository: ${{ env.CICD_REPO }}
           ref: ${{ env.CICD_REF }}
+          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
           path: .cicd
           fetch-depth: 1
       - uses: actions/download-artifact@v4
