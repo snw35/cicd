@@ -8,7 +8,7 @@ SECRETS_FILE="${ROOT}/tests/workflows/act.secrets"
 EVENT_WORKFLOW_CALL="${ROOT}/tests/workflows/events/workflow_call.json"
 EVENT_WORKFLOW_CALL_CREATE_RELEASE="${ROOT}/tests/workflows/events/workflow_call_create_release.json"
 EVENT_WORKFLOW_DISPATCH="${ROOT}/tests/workflows/events/workflow_dispatch.json"
-ACT_IMAGE="${ACT_IMAGE:-catthehacker/ubuntu:full-latest}"
+ACT_IMAGE="${ACT_IMAGE:-ghcr.io/catthehacker/ubuntu:full-latest}"
 
 cd "${ROOT}"
 
