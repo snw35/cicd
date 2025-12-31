@@ -35,6 +35,21 @@ act schedule -W .github/workflows/github.yaml -j container-update --secret-file 
 
 This simulates the scheduled run locally without pushing images or tags.
 
+## Workflow tests
+
+To exercise the workflow logic locally (requires Docker for act), run:
+
+```
+tests/workflows/run.sh
+```
+
+For lint-only checks without Docker, use pre-commit:
+
+```
+pre-commit install
+pre-commit run --all-files
+```
+
 ## Multiple Dockerfiles
 
 The reusable workflow accepts a `WORKDIR` input so you can run it against Dockerfiles in subdirectories. From a downstream repository you can fan out over multiple services with a matrix, for example:

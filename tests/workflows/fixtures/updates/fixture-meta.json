@@ -1,0 +1,9 @@
+{
+  "name": "fixture",
+  "workdir": "tests/workflows/fixtures/workdir",
+  "changed": "true",
+  "tag_exists": "false",
+  "proposed_tag": "fixture-2.3.4",
+  "docker_tag": "fixture-2.3.4",
+  "image": "example/fixture:fixture-2.3.4"
+}

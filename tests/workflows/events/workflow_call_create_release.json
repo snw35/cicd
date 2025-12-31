@@ -1,0 +1,8 @@
+{
+  "inputs": {
+    "targets_json": "",
+    "CICD_TEST_MODE": "true",
+    "CICD_TEST_FIXTURES_DIR": "tests/workflows/fixtures",
+    "CICD_TEST_EXPECT_TAG": "fixture-2.3.4"
+  }
+}

@@ -3,6 +3,14 @@ name: Workflow integration test
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      CICD_TEST_MODE:
+        required: false
+        default: ""
+        type: string
+
+env:
+  CICD_TEST_MODE: ${{ github.event.inputs.CICD_TEST_MODE || '' }}
 
 jobs:
   integration-test:
@@ -49,16 +57,29 @@ jobs:
         run: rm -f new_ver.json
 
       - name: Run nvchecker on sample config
+        if: env.CICD_TEST_MODE != 'true'
         working-directory: integration-test
         run: docker run --rm --name nvchecker-integration --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/nvchecker:${NVCHECKER_VERSION}" nvchecker -l debug -c nvchecker.toml
 
       - name: Run dfupdate on sample Dockerfile
+        if: env.CICD_TEST_MODE != 'true'
         working-directory: integration-test
         run: docker run --rm --name dfupdate-integration --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
 
       - name: Fix Dockerfile permissions
+        if: env.CICD_TEST_MODE != 'true'
         working-directory: integration-test
         run: sudo chown runner:runner Dockerfile
+
+      - name: Run nvchecker on sample config (test mode)
+        if: env.CICD_TEST_MODE == 'true'
+        working-directory: integration-test
+        run: "$GITHUB_WORKSPACE/tests/workflows/stubs/nvchecker.sh"
+
+      - name: Run dfupdate on sample Dockerfile (test mode)
+        if: env.CICD_TEST_MODE == 'true'
+        working-directory: integration-test
+        run: "$GITHUB_WORKSPACE/tests/workflows/stubs/dfupdate.sh"
 
       - name: Verify Dockerfile updated with discovered version
         working-directory: integration-test

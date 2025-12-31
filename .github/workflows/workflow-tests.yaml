@@ -1,0 +1,20 @@
+name: Workflow tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  act-workflow-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install act
+        run: |
+          install_dir="$HOME/.local/bin"
+          mkdir -p "$install_dir"
+          curl -sSL https://github.com/nektos/act/releases/latest/download/act_Linux_x86_64.tar.gz \
+            | tar -xz -C "$install_dir" act
+          echo "$install_dir" >> "$GITHUB_PATH"
+      - name: Run workflow harness
+        run: tests/workflows/run.sh

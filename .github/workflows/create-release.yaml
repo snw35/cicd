@@ -8,6 +8,18 @@ on:
         required: false
         default: ""
         type: string
+      CICD_TEST_MODE:
+        required: false
+        default: ""
+        type: string
+      CICD_TEST_FIXTURES_DIR:
+        required: false
+        default: ""
+        type: string
+      CICD_TEST_EXPECT_TAG:
+        required: false
+        default: ""
+        type: string
     outputs:
       tag:
         description: Tag used for the release
@@ -15,6 +27,9 @@ on:
 
 env:
   GH_TOKEN: ${{ github.token }}
+  CICD_TEST_MODE: ${{ inputs.CICD_TEST_MODE }}
+  CICD_TEST_FIXTURES_DIR: ${{ inputs.CICD_TEST_FIXTURES_DIR }}
+  CICD_TEST_EXPECT_TAG: ${{ inputs.CICD_TEST_EXPECT_TAG }}
 
 jobs:
   aggregate-changes:
@@ -40,6 +55,15 @@ jobs:
           path: /tmp/updates
           merge-multiple: true
         continue-on-error: true
+      - name: Seed test updates
+        if: env.CICD_TEST_MODE == 'true'
+        run: |
+          if [ -z "${CICD_TEST_FIXTURES_DIR:-}" ]; then
+            echo "CICD_TEST_FIXTURES_DIR not set in test mode" >&2
+            exit 1
+          fi
+          mkdir -p /tmp/updates
+          cp "${CICD_TEST_FIXTURES_DIR}/updates/"* /tmp/updates/
       - id: collect
         run: |
           python <<'PY'
@@ -95,7 +119,7 @@ jobs:
             echo "committed=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Push commits and tags
-        if: steps.collect.outputs.meta_found == 'true'
+        if: steps.collect.outputs.meta_found == 'true' && env.CICD_TEST_MODE != 'true'
         run: |
           git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
           if [ "${{ steps.commit.outputs.committed }}" = "true" ]; then
@@ -163,8 +187,19 @@ jobs:
           else
             echo "No changed targets found; skipping tag creation."
           fi
+      - name: Verify picked tag (test mode)
+        if: env.CICD_TEST_MODE == 'true' && steps.pick_tag.outputs.tag != ''
+        run: |
+          if [ -z "${CICD_TEST_EXPECT_TAG:-}" ]; then
+            echo "CICD_TEST_EXPECT_TAG not set in test mode" >&2
+            exit 1
+          fi
+          if [ "${{ steps.pick_tag.outputs.tag }}" != "${CICD_TEST_EXPECT_TAG}" ]; then
+            echo "Expected tag ${CICD_TEST_EXPECT_TAG}, got ${{ steps.pick_tag.outputs.tag }}" >&2
+            exit 1
+          fi
       - name: Sync release tag to latest commit
-        if: steps.pick_tag.outputs.tag != ''
+        if: env.CICD_TEST_MODE != 'true' && steps.pick_tag.outputs.tag != ''
         run: |
           tag="${{ steps.pick_tag.outputs.tag }}"
           git fetch origin "${GITHUB_REF_NAME}"
@@ -172,7 +207,7 @@ jobs:
           git tag -f "$tag"
           git push --force origin "refs/tags/${tag}"
       - uses: softprops/action-gh-release@v2
-        if: steps.pick_tag.outputs.tag != ''
+        if: env.CICD_TEST_MODE != 'true' && steps.pick_tag.outputs.tag != ''
         with:
           tag_name: ${{ steps.pick_tag.outputs.tag }}
           name: Release ${{ steps.pick_tag.outputs.tag }}
