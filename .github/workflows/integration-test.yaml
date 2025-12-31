@@ -74,12 +74,14 @@ jobs:
       - name: Run nvchecker on sample config (test mode)
         if: env.CICD_TEST_MODE == 'true'
         working-directory: integration-test
-        run: "$GITHUB_WORKSPACE/tests/workflows/stubs/nvchecker.sh"
+        run: |
+          "${GITHUB_WORKSPACE}/tests/workflows/stubs/nvchecker.sh"
 
       - name: Run dfupdate on sample Dockerfile (test mode)
         if: env.CICD_TEST_MODE == 'true'
         working-directory: integration-test
-        run: "$GITHUB_WORKSPACE/tests/workflows/stubs/dfupdate.sh"
+        run: |
+          "${GITHUB_WORKSPACE}/tests/workflows/stubs/dfupdate.sh"
 
       - name: Verify Dockerfile updated with discovered version
         working-directory: integration-test

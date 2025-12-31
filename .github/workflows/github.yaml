@@ -68,7 +68,7 @@ jobs:
   # Run nvchecker/dfupdate, build/push when needed, and package artifacts per target.
   container-update:
     name: Automated container update (${{ matrix.target.name }})
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || env.CICD_TEST_MODE == 'true'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.CICD_TEST_MODE == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -91,7 +91,8 @@ jobs:
       - run: df -h
       - name: Run nvchecker (test mode)
         if: env.CICD_TEST_MODE == 'true'
-        run: "$GITHUB_WORKSPACE/tests/workflows/stubs/nvchecker.sh"
+        run: |
+          "${GITHUB_WORKSPACE}/tests/workflows/stubs/nvchecker.sh"
         working-directory: ${{ env.WORKDIR }}
       - name: Run nvchecker
         if: env.CICD_TEST_MODE != 'true'
@@ -99,7 +100,8 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
       - name: Run dfupdate (test mode)
         if: env.CICD_TEST_MODE == 'true'
-        run: "$GITHUB_WORKSPACE/tests/workflows/stubs/dfupdate.sh"
+        run: |
+          "${GITHUB_WORKSPACE}/tests/workflows/stubs/dfupdate.sh"
         working-directory: ${{ env.WORKDIR }}
       - name: Run dfupdate
         if: env.CICD_TEST_MODE != 'true'
@@ -380,7 +382,7 @@ jobs:
     name: Collect metadata
     needs: container-update
     if: >
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || env.CICD_TEST_MODE == 'true')
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.CICD_TEST_MODE == 'true')
       && needs.container-update.result != 'failure'
     runs-on: ubuntu-latest
     permissions:
