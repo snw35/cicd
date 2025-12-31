@@ -88,6 +88,13 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
       - run: docker run --rm --name dfupdate --mount "type=bind,source=${PWD},target=/data/" -w /data "snw35/dfupdate:${DFUPDATE_VERSION}"
         working-directory: ${{ env.WORKDIR }}
+      - name: Sync version snapshot
+        run: |
+          if [ -f new_ver.json ]; then
+            sudo cp new_ver.json old_ver.json
+            sudo chown runner:runner old_ver.json
+          fi
+        working-directory: ${{ env.WORKDIR }}
       - id: check_changes
         run: |
           if [[ $(git -C "$GITHUB_WORKSPACE" status --porcelain | wc -l) -eq 0 ]]; then
