@@ -95,10 +95,22 @@ jobs:
             echo "CICD_REPO=${repo}"
             echo "CICD_REF=${ref}"
           } >> "$GITHUB_ENV"
-          if [ "${repo}" = "${GITHUB_REPOSITORY}" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+          scripts_dir=""
+          repo_dir=""
+          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+            repo_dir="${GITHUB_WORKSPACE}"
+            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
+          elif [ -d "/github/workspace/.github/scripts" ]; then
+            repo_dir="/github/workspace"
+            scripts_dir="/github/workspace/.github/scripts"
+          elif [ -d "$(pwd)/.github/scripts" ]; then
+            repo_dir="$(pwd)"
+            scripts_dir="$(pwd)/.github/scripts"
+          fi
+          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
             {
-              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}"
-              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.github/scripts"
+              echo "CICD_REPO_DIR=${repo_dir}"
+              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
               echo "CICD_NEED_CHECKOUT=false"
             } >> "$GITHUB_ENV"
           else
@@ -348,10 +360,22 @@ jobs:
             echo "CICD_REPO=${repo}"
             echo "CICD_REF=${ref}"
           } >> "$GITHUB_ENV"
-          if [ "${repo}" = "${GITHUB_REPOSITORY}" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+          scripts_dir=""
+          repo_dir=""
+          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+            repo_dir="${GITHUB_WORKSPACE}"
+            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
+          elif [ -d "/github/workspace/.github/scripts" ]; then
+            repo_dir="/github/workspace"
+            scripts_dir="/github/workspace/.github/scripts"
+          elif [ -d "$(pwd)/.github/scripts" ]; then
+            repo_dir="$(pwd)"
+            scripts_dir="$(pwd)/.github/scripts"
+          fi
+          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
             {
-              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}"
-              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.github/scripts"
+              echo "CICD_REPO_DIR=${repo_dir}"
+              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
               echo "CICD_NEED_CHECKOUT=false"
             } >> "$GITHUB_ENV"
           else
