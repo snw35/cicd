@@ -41,16 +41,6 @@ on:
         required: false
         type: string
         default: .
-      CICD_REPO:
-        required: false
-        type: string
-        default: ""
-        description: Repository containing CICD helper scripts (owner/repo).
-      CICD_REF:
-        required: false
-        type: string
-        default: ""
-        description: Ref (branch or tag) for CICD helper scripts.
 
 jobs:
 
@@ -86,10 +76,54 @@ jobs:
       TARGET_NAME: ${{ matrix.target.name }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/resolve-cicd
+      - &resolve_cicd
+        name: Resolve CICD helper repo
+        run: |
+          repo="${GITHUB_WORKFLOW_REF%%/.github/workflows/*}"
+          ref="${GITHUB_WORKFLOW_REF##*@}"
+          if [ -z "$repo" ] || [ "$repo" = "$GITHUB_WORKFLOW_REF" ]; then
+            repo="${GITHUB_REPOSITORY}"
+          fi
+          if [ -z "$ref" ] || [ "$ref" = "$GITHUB_WORKFLOW_REF" ]; then
+            ref="${GITHUB_REF_NAME}"
+          fi
+          if [ -z "$ref" ]; then
+            ref="mainline"
+          fi
+          if [ "$repo" = "$GITHUB_REPOSITORY" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+            repo_dir="${GITHUB_WORKSPACE}"
+            scripts_dir="${repo_dir}/.github/scripts"
+            need_checkout="false"
+          else
+            repo_dir="${GITHUB_WORKSPACE}/.cicd"
+            scripts_dir="${repo_dir}/.github/scripts"
+            need_checkout="true"
+          fi
+          {
+            echo "CICD_REPO=$repo"
+            echo "CICD_REF=$ref"
+            echo "CICD_REPO_DIR=$repo_dir"
+            echo "CICD_SCRIPTS_DIR=$scripts_dir"
+            echo "CICD_NEED_CHECKOUT=$need_checkout"
+          } >> "$GITHUB_ENV"
+      - &checkout_cicd
+        name: Checkout CICD scripts
+        if: env.CICD_NEED_CHECKOUT == 'true'
+        uses: actions/checkout@v4
         with:
-          cicd_repo: ${{ inputs.CICD_REPO }}
-          cicd_ref: ${{ inputs.CICD_REF }}
+          repository: ${{ env.CICD_REPO }}
+          ref: ${{ env.CICD_REF }}
+          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
+          path: .cicd
+          fetch-depth: 1
+      - &ignore_cicd
+        name: Ignore CICD helper checkout
+        if: env.CICD_NEED_CHECKOUT == 'true'
+        run: |
+          exclude_file="${GITHUB_WORKSPACE}/.git/info/exclude"
+          if [ -f "${exclude_file}" ] && ! grep -qx "/.cicd/" "${exclude_file}"; then
+            echo "/.cicd/" >> "${exclude_file}"
+          fi
       - name: Compute target slug
         run: |
           TARGET_SLUG=$(echo "${TARGET_NAME}" | tr '/.' '-')
@@ -282,10 +316,9 @@ jobs:
       targets_json: ${{ steps.collect.outputs.targets_json }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/resolve-cicd
-        with:
-          cicd_repo: ${{ inputs.CICD_REPO }}
-          cicd_ref: ${{ inputs.CICD_REF }}
+      - *resolve_cicd
+      - *checkout_cicd
+      - *ignore_cicd
       - uses: actions/download-artifact@v4
         with:
           pattern: update-*-${{ github.run_attempt }}
