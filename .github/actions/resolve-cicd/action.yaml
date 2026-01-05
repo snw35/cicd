@@ -33,6 +33,7 @@ runs:
       env:
         WORKFLOW_REF: ${{ github.workflow_ref }}
         ACTION_REPO: ${{ github.action_repository }}
+        ACTION_REF: ${{ github.action_ref }}
         ACTION_PATH: ${{ github.action_path }}
         INPUT_CICD_REPO: ${{ inputs.cicd_repo }}
         INPUT_CICD_REF: ${{ inputs.cicd_ref }}

@@ -32,6 +32,7 @@ def main() -> int:
     input_ref = os.environ.get("INPUT_CICD_REF", "").strip()
     workflow_ref = os.environ.get("WORKFLOW_REF", "").strip()
     action_repo = os.environ.get("ACTION_REPO", "").strip()
+    action_ref = os.environ.get("ACTION_REF", "").strip()
     action_path = os.environ.get("ACTION_PATH", "").strip()
     github_repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
     github_ref_name = os.environ.get("GITHUB_REF_NAME", "").strip()
@@ -39,10 +40,14 @@ def main() -> int:
 
     wf_repo, wf_ref = parse_workflow_ref(workflow_ref)
 
-    repo = input_repo or wf_repo or action_repo or "snw35/cicd"
-    ref = input_ref or wf_ref
+    repo = input_repo or action_repo or wf_repo or "snw35/cicd"
+    ref = input_ref
     if not ref:
-        if repo == github_repo and github_ref_name:
+        if action_ref and repo == action_repo:
+            ref = action_ref
+        elif wf_ref and repo == wf_repo:
+            ref = wf_ref
+        elif repo == github_repo and github_ref_name:
             ref = github_ref_name
         else:
             ref = "mainline"
