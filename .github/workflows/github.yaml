@@ -328,7 +328,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - *resolve_cicd
-      - *debug_cicd
       - *checkout_cicd
       - *ignore_cicd
       - uses: actions/download-artifact@v4

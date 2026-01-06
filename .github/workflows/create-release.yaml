@@ -152,7 +152,6 @@ jobs:
         with:
           fetch-depth: 0
       - *resolve_cicd
-      - *debug_cicd
       - *checkout_cicd
       - *ignore_cicd
       - name: Pick combined release tag from changed targets
