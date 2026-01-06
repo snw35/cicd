@@ -65,6 +65,15 @@ jobs:
             echo "CICD_SCRIPTS_DIR=$scripts_dir"
             echo "CICD_NEED_CHECKOUT=$need_checkout"
           } >> "$GITHUB_ENV"
+      - &debug_cicd
+        name: Debug CICD refs
+        run: |
+          echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}"
+          echo "GITHUB_REF=${GITHUB_REF}"
+          echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
+          echo "GITHUB_WORKFLOW_REF=${GITHUB_WORKFLOW_REF}"
+          echo "CICD_REPO=${CICD_REPO}"
+          echo "CICD_REF=${CICD_REF}"
       - &checkout_cicd
         name: Checkout CICD scripts
         if: env.CICD_NEED_CHECKOUT == 'true'
@@ -142,6 +151,7 @@ jobs:
         with:
           fetch-depth: 0
       - *resolve_cicd
+      - *debug_cicd
       - *checkout_cicd
       - *ignore_cicd
       - name: Pick combined release tag from changed targets
