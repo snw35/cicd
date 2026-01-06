@@ -8,26 +8,9 @@ on:
         required: false
         default: ""
         type: string
-      CICD_TEST_MODE:
-        required: false
-        default: ""
-        type: string
-      CICD_TEST_FIXTURES_DIR:
-        required: false
-        default: ""
-        type: string
-      CICD_TEST_EXPECT_TAG:
-        required: false
-        default: ""
-        type: string
-      CICD_REPO:
-        required: false
-        default: ""
-        type: string
-        description: Repository containing CICD helper scripts (owner/repo).
       CICD_REF:
         required: false
-        default: ""
+        default: "mainline"
         type: string
         description: Ref (branch or tag) for CICD helper scripts.
     outputs:
@@ -37,9 +20,6 @@ on:
 
 env:
   GH_TOKEN: ${{ github.token }}
-  CICD_TEST_MODE: ${{ inputs.CICD_TEST_MODE }}
-  CICD_TEST_FIXTURES_DIR: ${{ inputs.CICD_TEST_FIXTURES_DIR }}
-  CICD_TEST_EXPECT_TAG: ${{ inputs.CICD_TEST_EXPECT_TAG }}
 
 jobs:
   aggregate-changes:
@@ -59,64 +39,54 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Resolve CICD workflow ref
+      - &resolve_cicd
+        name: Resolve CICD helper repo
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          INPUT_CICD_REF: ${{ inputs.CICD_REF }}
         run: |
-          workflow_ref="${{ github.workflow_ref }}"
-          input_repo="${{ inputs.CICD_REPO }}"
-          input_ref="${{ inputs.CICD_REF }}"
-          repo="${input_repo}"
-          ref="${input_ref}"
-          if [ -z "${repo}" ]; then
-            repo="snw35/cicd"
-          fi
-          if [ -z "${ref}" ]; then
-            if [ -n "${workflow_ref}" ]; then
-              ref="${workflow_ref##*@}"
-            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
+          repo="snw35/cicd"
+          if [ -n "${INPUT_CICD_REF}" ]; then
+            ref="${INPUT_CICD_REF}"
+          else
+          workflow_ref="${WORKFLOW_REF:-}"
+          ref="${workflow_ref##*@}"
+          if [ -z "$ref" ] || [ "$ref" = "$workflow_ref" ]; then
+            if [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "$GITHUB_REF_NAME" ]; then
               ref="${GITHUB_REF_NAME}"
             else
               ref="mainline"
             fi
           fi
-          {
-            echo "CICD_REPO=${repo}"
-            echo "CICD_REF=${ref}"
-          } >> "$GITHUB_ENV"
-          scripts_dir=""
-          repo_dir=""
-          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
+          fi
+          if [ "$repo" = "$GITHUB_REPOSITORY" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
             repo_dir="${GITHUB_WORKSPACE}"
-            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
-          elif [ -d "/github/workspace/.github/scripts" ]; then
-            repo_dir="/github/workspace"
-            scripts_dir="/github/workspace/.github/scripts"
-          elif [ -d "$(pwd)/.github/scripts" ]; then
-            repo_dir="$(pwd)"
-            scripts_dir="$(pwd)/.github/scripts"
-          fi
-          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-            {
-              echo "CICD_REPO_DIR=${repo_dir}"
-              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
-              echo "CICD_NEED_CHECKOUT=false"
-            } >> "$GITHUB_ENV"
+            scripts_dir="${repo_dir}/.github/scripts"
+            need_checkout="false"
           else
-            {
-              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
-              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
-              echo "CICD_NEED_CHECKOUT=true"
-            } >> "$GITHUB_ENV"
+            repo_dir="${GITHUB_WORKSPACE}/.cicd"
+            scripts_dir="${repo_dir}/.github/scripts"
+            need_checkout="true"
           fi
-      - name: Checkout CICD scripts
-        uses: actions/checkout@v4
+          {
+            echo "CICD_REPO=$repo"
+            echo "CICD_REF=$ref"
+            echo "CICD_REPO_DIR=$repo_dir"
+            echo "CICD_SCRIPTS_DIR=$scripts_dir"
+            echo "CICD_NEED_CHECKOUT=$need_checkout"
+          } >> "$GITHUB_ENV"
+      - &checkout_cicd
+        name: Checkout CICD scripts
         if: env.CICD_NEED_CHECKOUT == 'true'
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CICD_REPO }}
           ref: ${{ env.CICD_REF }}
           token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
           path: .cicd
           fetch-depth: 1
-      - name: Ignore CICD helper checkout
+      - &ignore_cicd
+        name: Ignore CICD helper checkout
         if: env.CICD_NEED_CHECKOUT == 'true'
         run: |
           exclude_file="${GITHUB_WORKSPACE}/.git/info/exclude"
@@ -124,34 +94,14 @@ jobs:
             echo "/.cicd/" >> "${exclude_file}"
           fi
       - uses: actions/download-artifact@v4
-        if: env.CICD_TEST_MODE != 'true'
         with:
           pattern: update-*-${{ github.run_attempt }}
           path: /tmp/updates
           merge-multiple: true
         continue-on-error: true
-      - name: Seed test updates
-        if: env.CICD_TEST_MODE == 'true'
-        run: |
-          if [ -z "${CICD_TEST_FIXTURES_DIR:-}" ]; then
-            echo "CICD_TEST_FIXTURES_DIR not set in test mode" >&2
-            exit 1
-          fi
-          fixtures_dir="${CICD_TEST_FIXTURES_DIR}"
-          repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-          if [ ! -d "${fixtures_dir}" ] && [ "${fixtures_dir#"/github/workspace/"}" != "${fixtures_dir}" ]; then
-            fixtures_dir="${repo_root}/${fixtures_dir#/github/workspace/}"
-          fi
-          if [ ! -d "${fixtures_dir}" ]; then
-            fixtures_dir="${repo_root}/${CICD_TEST_FIXTURES_DIR}"
-          fi
-          if [ ! -d "${fixtures_dir}/updates" ]; then
-            echo "Fixture updates directory not found: ${fixtures_dir}/updates" >&2
-            exit 1
-          fi
-          mkdir -p /tmp/updates
-          cp "${fixtures_dir}/updates/"* /tmp/updates/
       - id: collect
+        env:
+          UPDATES_DIR: /tmp/updates
         run: python3 "$CICD_SCRIPTS_DIR/collect_updates.py"
       - name: Apply aggregated patches
         if: steps.collect.outputs.meta_found == 'true'
@@ -175,7 +125,7 @@ jobs:
             echo "committed=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Push commits and tags
-        if: steps.collect.outputs.meta_found == 'true' && env.CICD_TEST_MODE != 'true'
+        if: steps.collect.outputs.meta_found == 'true'
         run: |
           git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
           if [ "${{ steps.commit.outputs.committed }}" = "true" ]; then
@@ -201,63 +151,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Resolve CICD workflow ref
-        run: |
-          workflow_ref="${{ github.workflow_ref }}"
-          input_repo="${{ inputs.CICD_REPO }}"
-          input_ref="${{ inputs.CICD_REF }}"
-          repo="${input_repo}"
-          ref="${input_ref}"
-          if [ -z "${repo}" ]; then
-            repo="snw35/cicd"
-          fi
-          if [ -z "${ref}" ]; then
-            if [ -n "${workflow_ref}" ]; then
-              ref="${workflow_ref##*@}"
-            elif [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-              ref="${GITHUB_REF_NAME}"
-            else
-              ref="mainline"
-            fi
-          fi
-          {
-            echo "CICD_REPO=${repo}"
-            echo "CICD_REF=${ref}"
-          } >> "$GITHUB_ENV"
-          scripts_dir=""
-          repo_dir=""
-          if [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
-            repo_dir="${GITHUB_WORKSPACE}"
-            scripts_dir="${GITHUB_WORKSPACE}/.github/scripts"
-          elif [ -d "/github/workspace/.github/scripts" ]; then
-            repo_dir="/github/workspace"
-            scripts_dir="/github/workspace/.github/scripts"
-          elif [ -d "$(pwd)/.github/scripts" ]; then
-            repo_dir="$(pwd)"
-            scripts_dir="$(pwd)/.github/scripts"
-          fi
-          if [ -n "${scripts_dir}" ] && [ "${repo}" = "${GITHUB_REPOSITORY}" ]; then
-            {
-              echo "CICD_REPO_DIR=${repo_dir}"
-              echo "CICD_SCRIPTS_DIR=${scripts_dir}"
-              echo "CICD_NEED_CHECKOUT=false"
-            } >> "$GITHUB_ENV"
-          else
-            {
-              echo "CICD_REPO_DIR=${GITHUB_WORKSPACE}/.cicd"
-              echo "CICD_SCRIPTS_DIR=${GITHUB_WORKSPACE}/.cicd/.github/scripts"
-              echo "CICD_NEED_CHECKOUT=true"
-            } >> "$GITHUB_ENV"
-          fi
-      - name: Checkout CICD scripts
-        uses: actions/checkout@v4
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        with:
-          repository: ${{ env.CICD_REPO }}
-          ref: ${{ env.CICD_REF }}
-          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
-          path: .cicd
-          fetch-depth: 1
+      - *resolve_cicd
+      - *checkout_cicd
+      - *ignore_cicd
       - name: Pick combined release tag from changed targets
         id: pick_tag
         env:
@@ -269,19 +165,8 @@ jobs:
           else
             echo "No changed targets found; skipping tag creation."
           fi
-      - name: Verify picked tag (test mode)
-        if: env.CICD_TEST_MODE == 'true' && steps.pick_tag.outputs.tag != ''
-        run: |
-          if [ -z "${CICD_TEST_EXPECT_TAG:-}" ]; then
-            echo "CICD_TEST_EXPECT_TAG not set in test mode" >&2
-            exit 1
-          fi
-          if [ "${{ steps.pick_tag.outputs.tag }}" != "${CICD_TEST_EXPECT_TAG}" ]; then
-            echo "Expected tag ${CICD_TEST_EXPECT_TAG}, got ${{ steps.pick_tag.outputs.tag }}" >&2
-            exit 1
-          fi
       - name: Sync release tag to latest commit
-        if: env.CICD_TEST_MODE != 'true' && steps.pick_tag.outputs.tag != ''
+        if: steps.pick_tag.outputs.tag != ''
         run: |
           tag="${{ steps.pick_tag.outputs.tag }}"
           git fetch origin "${GITHUB_REF_NAME}"
@@ -289,7 +174,7 @@ jobs:
           git tag -f "$tag"
           git push --force origin "refs/tags/${tag}"
       - uses: softprops/action-gh-release@v2
-        if: env.CICD_TEST_MODE != 'true' && steps.pick_tag.outputs.tag != ''
+        if: steps.pick_tag.outputs.tag != ''
         with:
           tag_name: ${{ steps.pick_tag.outputs.tag }}
           name: Release ${{ steps.pick_tag.outputs.tag }}

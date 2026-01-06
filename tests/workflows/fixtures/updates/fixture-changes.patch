@@ -1,6 +1,0 @@
-diff --git a/tests/workflows/fixtures/release-target.txt b/tests/workflows/fixtures/release-target.txt
---- a/tests/workflows/fixtures/release-target.txt
-+++ b/tests/workflows/fixtures/release-target.txt
-@@ -1 +1 @@
--before
-+after

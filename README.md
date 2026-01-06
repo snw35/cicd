@@ -25,24 +25,6 @@ The Github Actions linter can be run locally on Fedora with:
 podman run --security-opt label=disable --userns keep-id --rm -v $(pwd):/repo --workdir /repo rhysd/actionlint:latest -color
 ```
 
-## Dry-run with act
-
-Create a `.secrets` file with any secrets referenced by the workflow (for example `GH_TOKEN=fake`, `DOCKER_PASSWORD=fake`) and run:
-
-```
-act schedule -W .github/workflows/github.yaml -j container-update --secret-file .secrets
-```
-
-This simulates the scheduled run locally without pushing images or tags.
-
-## Workflow tests
-
-To exercise the workflow logic locally (requires Docker for act), run:
-
-```
-tests/workflows/run.sh
-```
-
 For lint-only checks without Docker, use pre-commit:
 
 ```
@@ -64,17 +46,12 @@ jobs:
     with:
       WORKDIR: ${{ matrix.workdir }}
       IMAGE_TAG: CONFD_VERSION
-      CICD_REPO: snw35/cicd
-      CICD_REF: mainline
     secrets: inherit
 
   create-release:
     needs: update-images
     if: github.ref_name == github.event.repository.default_branch && needs.update-images.outputs.changed == 'true'
     uses: snw35/cicd/.github/workflows/create-release.yaml@mainline
-    with:
-      CICD_REPO: snw35/cicd
-      CICD_REF: mainline
     secrets: inherit
 ```
 
@@ -82,5 +59,7 @@ Which will process:
 
  * repo/web/Dockerfile
  * repo/backend/Dockerfile
+
+Helper scripts are resolved from `snw35/cicd` and checked out to `.cicd` automatically when running from downstream repositories. Use the optional `CICD_REF` input to select the helper scripts ref (defaults to `mainline`).
 
 The default is to run for the current working directory only. Each matrix run emits `changed` (aggregated across targets), `docker_tag`, `proposed_tag`, `image`, and `targets` outputs. The downstream `create-release` workflow collects the per-target artifacts produced by the updater, applies the combined patch, and creates a single release if any Dockerfile changed. If multiple Dockerfiles were updated, the release tag and name will combine each updated workdir and tag (for example `web-1.0-backend-1.0`).
