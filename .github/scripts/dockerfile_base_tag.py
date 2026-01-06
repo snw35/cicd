@@ -6,7 +6,9 @@ from dockerfile_parse import DockerfileParser
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Extract base image tag from a Dockerfile.")
+    parser = argparse.ArgumentParser(
+        description="Extract base image tag from a Dockerfile."
+    )
     parser.add_argument(
         "--path",
         default="Dockerfile",

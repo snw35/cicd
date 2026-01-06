@@ -67,7 +67,9 @@ def cmd_json(envs: dict) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Extract ENV values from a Dockerfile.")
+    parser = argparse.ArgumentParser(
+        description="Extract ENV values from a Dockerfile."
+    )
     parser.add_argument(
         "--path",
         default="Dockerfile",
