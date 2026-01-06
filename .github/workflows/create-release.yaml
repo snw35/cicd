@@ -42,12 +42,16 @@ jobs:
       - name: Resolve CICD helper repo
         env:
           INPUT_CICD_REF: ${{ inputs.CICD_REF }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           repo="snw35/cicd"
           ref="${INPUT_CICD_REF:-}"
+          workflow_ref="${WORKFLOW_REF:-}"
           if [ -z "$ref" ]; then
             if [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
               ref="${GITHUB_REF_NAME}"
+            elif [ -n "$workflow_ref" ] && [ "$workflow_ref" != "${workflow_ref%@*}" ]; then
+              ref="${workflow_ref##*@}"
             else
               ref="mainline"
             fi

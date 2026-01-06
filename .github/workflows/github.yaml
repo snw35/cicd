@@ -84,11 +84,15 @@ jobs:
       - name: Resolve CICD helper repo
         env:
           INPUT_CICD_REF: ${{ inputs.CICD_REF }}
+          INPUT_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           repo="snw35/cicd"
           ref="${INPUT_CICD_REF:-}"
           if [ -z "$ref" ]; then
-            if [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
+            workflow_ref="${INPUT_WORKFLOW_REF:-}"
+            if [ -n "$workflow_ref" ] && [ "${workflow_ref#*@}" != "$workflow_ref" ]; then
+              ref="${workflow_ref##*@}"
+            elif [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
               ref="${GITHUB_REF_NAME}"
             else
               ref="mainline"
@@ -321,11 +325,15 @@ jobs:
       - name: Resolve CICD helper repo
         env:
           INPUT_CICD_REF: ${{ inputs.CICD_REF }}
+          INPUT_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           repo="snw35/cicd"
           ref="${INPUT_CICD_REF:-}"
           if [ -z "$ref" ]; then
-            if [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
+            workflow_ref="${INPUT_WORKFLOW_REF:-}"
+            if [ -n "$workflow_ref" ] && [ "${workflow_ref#*@}" != "$workflow_ref" ]; then
+              ref="${workflow_ref##*@}"
+            elif [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
               ref="${GITHUB_REF_NAME}"
             else
               ref="mainline"
