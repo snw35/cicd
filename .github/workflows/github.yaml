@@ -82,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Resolve CICD helper repo
-        uses: ./.github/actions/resolve-cicd
+        uses: snw35/cicd/.github/actions/resolve-cicd@${{ inputs.CICD_REF }}
         with:
           cicd_ref: ${{ inputs.CICD_REF }}
           checkout_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
@@ -279,7 +279,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Resolve CICD helper repo
-        uses: ./.github/actions/resolve-cicd
+        uses: snw35/cicd/.github/actions/resolve-cicd@${{ inputs.CICD_REF }}
         with:
           cicd_ref: ${{ inputs.CICD_REF }}
           checkout_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
