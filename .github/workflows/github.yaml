@@ -79,16 +79,14 @@ jobs:
       - &resolve_cicd
         name: Resolve CICD helper repo
         run: |
-          repo="${GITHUB_WORKFLOW_REF%%/.github/workflows/*}"
+          repo="snw35/cicd"
           ref="${GITHUB_WORKFLOW_REF##*@}"
-          if [ -z "$repo" ] || [ "$repo" = "$GITHUB_WORKFLOW_REF" ]; then
-            repo="${GITHUB_REPOSITORY}"
-          fi
           if [ -z "$ref" ] || [ "$ref" = "$GITHUB_WORKFLOW_REF" ]; then
-            ref="${GITHUB_REF_NAME}"
-          fi
-          if [ -z "$ref" ]; then
-            ref="mainline"
+            if [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "$GITHUB_REF_NAME" ]; then
+              ref="${GITHUB_REF_NAME}"
+            else
+              ref="mainline"
+            fi
           fi
           if [ "$repo" = "$GITHUB_REPOSITORY" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
             repo_dir="${GITHUB_WORKSPACE}"
