@@ -9,6 +9,8 @@ This reusable GitHub Actions workflow is designed to enable fully-automated cont
 
 Both containers are also udated by this workflow, and therefore by themselves. The [ReadMe for dfupdate](https://github.com/snw35/dfupdate) explains how to set a repository up to use it.
 
+For AI coding assistants, see `AGENTS.md` (repo context) and `REQUIREMENTS.md` (behavioral constraints).
+
 ## Troubleshooting Steps
 
 The container update steps can be run locally on Fedora with:
