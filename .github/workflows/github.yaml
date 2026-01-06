@@ -41,6 +41,11 @@ on:
         required: false
         type: string
         default: .
+      CICD_REF:
+        required: false
+        type: string
+        default: "mainline"
+        description: Ref (branch or tag) for CICD helper scripts.
 
 jobs:
 
@@ -80,8 +85,12 @@ jobs:
         name: Resolve CICD helper repo
         env:
           WORKFLOW_REF: ${{ github.workflow_ref }}
+          INPUT_CICD_REF: ${{ inputs.CICD_REF }}
         run: |
           repo="snw35/cicd"
+          if [ -n "${INPUT_CICD_REF}" ]; then
+            ref="${INPUT_CICD_REF}"
+          else
           workflow_ref="${WORKFLOW_REF:-}"
           ref="${workflow_ref##*@}"
           if [ -z "$ref" ] || [ "$ref" = "$workflow_ref" ]; then
@@ -90,6 +99,7 @@ jobs:
             else
               ref="mainline"
             fi
+          fi
           fi
           if [ "$repo" = "$GITHUB_REPOSITORY" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
             repo_dir="${GITHUB_WORKSPACE}"

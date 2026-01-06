@@ -60,6 +60,6 @@ Which will process:
  * repo/web/Dockerfile
  * repo/backend/Dockerfile
 
-Helper scripts are resolved from `snw35/cicd` at the reusable workflow ref (via `GITHUB_WORKFLOW_REF`) and checked out to `.cicd` automatically when running from downstream repositories.
+Helper scripts are resolved from `snw35/cicd` and checked out to `.cicd` automatically when running from downstream repositories. Use the optional `CICD_REF` input to select the helper scripts ref (defaults to `mainline`).
 
 The default is to run for the current working directory only. Each matrix run emits `changed` (aggregated across targets), `docker_tag`, `proposed_tag`, `image`, and `targets` outputs. The downstream `create-release` workflow collects the per-target artifacts produced by the updater, applies the combined patch, and creates a single release if any Dockerfile changed. If multiple Dockerfiles were updated, the release tag and name will combine each updated workdir and tag (for example `web-1.0-backend-1.0`).
