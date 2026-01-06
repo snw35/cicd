@@ -43,22 +43,7 @@ jobs:
         uses: ./.github/actions/resolve-cicd
         with:
           cicd_ref: ${{ inputs.CICD_REF }}
-      - name: Checkout CICD scripts
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CICD_REPO }}
-          ref: ${{ env.CICD_REF }}
-          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
-          path: .cicd
-          fetch-depth: 1
-      - name: Ignore CICD helper checkout
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        run: |
-          exclude_file="${GITHUB_WORKSPACE}/.git/info/exclude"
-          if [ -f "${exclude_file}" ] && ! grep -qx "/.cicd/" "${exclude_file}"; then
-            echo "/.cicd/" >> "${exclude_file}"
-          fi
+          checkout_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
       - uses: actions/download-artifact@v4
         with:
           pattern: update-*-${{ github.run_attempt }}
@@ -121,22 +106,7 @@ jobs:
         uses: ./.github/actions/resolve-cicd
         with:
           cicd_ref: ${{ inputs.CICD_REF }}
-      - name: Checkout CICD scripts
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CICD_REPO }}
-          ref: ${{ env.CICD_REF }}
-          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
-          path: .cicd
-          fetch-depth: 1
-      - name: Ignore CICD helper checkout
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        run: |
-          exclude_file="${GITHUB_WORKSPACE}/.git/info/exclude"
-          if [ -f "${exclude_file}" ] && ! grep -qx "/.cicd/" "${exclude_file}"; then
-            echo "/.cicd/" >> "${exclude_file}"
-          fi
+          checkout_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
       - name: Pick combined release tag from changed targets
         id: pick_tag
         env:
