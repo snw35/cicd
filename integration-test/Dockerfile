@@ -1,3 +1,0 @@
-FROM alpine:3.22
-
-ENV SAMPLE_VERSION=1.0.0
