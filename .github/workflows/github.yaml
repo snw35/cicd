@@ -44,7 +44,7 @@ on:
       CICD_REF:
         required: false
         type: string
-        default: "mainline"
+        default: "main"
         description: Ref (branch or tag) for CICD helper scripts.
 
 jobs:
@@ -95,7 +95,7 @@ jobs:
             elif [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
               ref="${GITHUB_REF_NAME}"
             else
-              ref="mainline"
+              ref="main"
             fi
           fi
           if [ "$repo" = "$GITHUB_REPOSITORY" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
@@ -336,7 +336,7 @@ jobs:
             elif [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
               ref="${GITHUB_REF_NAME}"
             else
-              ref="mainline"
+              ref="main"
             fi
           fi
           if [ "$repo" = "$GITHUB_REPOSITORY" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then

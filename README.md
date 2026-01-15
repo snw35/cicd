@@ -44,7 +44,7 @@ jobs:
     strategy:
       matrix:
         workdir: [web, backend]
-    uses: snw35/cicd/.github/workflows/github.yaml@mainline
+    uses: snw35/cicd/.github/workflows/github.yaml@main
     with:
       WORKDIR: ${{ matrix.workdir }}
       IMAGE_TAG: CONFD_VERSION
@@ -53,7 +53,7 @@ jobs:
   create-release:
     needs: update-images
     if: github.ref_name == github.event.repository.default_branch && needs.update-images.outputs.changed == 'true'
-    uses: snw35/cicd/.github/workflows/create-release.yaml@mainline
+    uses: snw35/cicd/.github/workflows/create-release.yaml@main
     secrets: inherit
 ```
 
@@ -62,6 +62,6 @@ Which will process:
  * repo/web/Dockerfile
  * repo/backend/Dockerfile
 
-Helper scripts are resolved from `snw35/cicd` and checked out to `.cicd` automatically when running from downstream repositories. Use the optional `CICD_REF` input to select the helper scripts ref (defaults to `mainline`).
+Helper scripts are resolved from `snw35/cicd` and checked out to `.cicd` automatically when running from downstream repositories. Use the optional `CICD_REF` input to select the helper scripts ref (defaults to `main`).
 
 The default is to run for the current working directory only. Each matrix run emits `changed` (aggregated across targets), `docker_tag`, `proposed_tag`, `image`, and `targets` outputs. The downstream `create-release` workflow collects the per-target artifacts produced by the updater, applies the combined patch, and creates a single release if any Dockerfile changed. If multiple Dockerfiles were updated, the release tag and name will combine each updated workdir and tag (for example `web-1.0-backend-1.0`).

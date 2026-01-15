@@ -14,7 +14,7 @@ workflows or helper scripts.
 - If `CICD_REF` is unset:
   - Prefer the `github.workflow_ref` ref when present.
   - If running within `snw35/cicd`, fall back to `GITHUB_REF_NAME`.
-  - Otherwise default to `mainline`.
+  - Otherwise default to `main`.
 - If running in `snw35/cicd` and `.github/scripts` exists, use local scripts.
 - Otherwise checkout `snw35/cicd` into `.cicd` at the resolved ref.
 
