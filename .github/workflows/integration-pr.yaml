@@ -1,0 +1,105 @@
+name: Integration PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: integration-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: Run upstream integration workflow
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CICD_REF: ${{ github.event.pull_request.head.ref }}
+      INTEGRATION_OWNER: snw35
+      INTEGRATION_REPO: cicd-integration
+      INTEGRATION_WORKFLOW: integration-update.yaml
+      INTEGRATION_REF: main
+      POLL_INTERVAL_MS: 15000
+      WAIT_TIMEOUT_MS: 3600000
+    steps:
+      - name: Dispatch integration workflow
+        id: dispatch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CICD_INTEGRATION_TOKEN }}
+          script: |
+            const owner = process.env.INTEGRATION_OWNER;
+            const repo = process.env.INTEGRATION_REPO;
+            const workflow_id = process.env.INTEGRATION_WORKFLOW;
+            const ref = process.env.INTEGRATION_REF;
+            const cicdRef = process.env.CICD_REF;
+            const now = new Date().toISOString();
+            core.info(`Dispatching ${owner}/${repo} ${workflow_id}@${ref} with cicd_ref=${cicdRef}`);
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id,
+              ref,
+              inputs: {
+                cicd_ref: cicdRef
+              }
+            });
+            core.setOutput('dispatch_time', now);
+      - name: Wait for integration workflow
+        uses: actions/github-script@v7
+        env:
+          DISPATCH_TIME: ${{ steps.dispatch.outputs.dispatch_time }}
+        with:
+          github-token: ${{ secrets.CICD_INTEGRATION_TOKEN }}
+          script: |
+            const owner = process.env.INTEGRATION_OWNER;
+            const repo = process.env.INTEGRATION_REPO;
+            const workflow_id = process.env.INTEGRATION_WORKFLOW;
+            const branch = process.env.INTEGRATION_REF;
+            const dispatchTime = new Date(process.env.DISPATCH_TIME);
+            const timeoutMs = parseInt(process.env.WAIT_TIMEOUT_MS || '3600000', 10);
+            const pollMs = parseInt(process.env.POLL_INTERVAL_MS || '15000', 10);
+            const deadline = Date.now() + timeoutMs;
+            const skewMs = 5000;
+            let runId = null;
+
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            while (Date.now() < deadline) {
+              if (!runId) {
+                const runs = await github.rest.actions.listWorkflowRuns({
+                  owner,
+                  repo,
+                  workflow_id,
+                  branch,
+                  event: 'workflow_dispatch',
+                  per_page: 10
+                });
+                const candidate = runs.data.workflow_runs.find((run) => {
+                  return new Date(run.created_at).getTime() >= dispatchTime.getTime() - skewMs;
+                });
+                if (candidate) {
+                  runId = candidate.id;
+                  core.info(`Found integration run ${runId} (${candidate.html_url}).`);
+                }
+              }
+              if (runId) {
+                const run = await github.rest.actions.getWorkflowRun({
+                  owner,
+                  repo,
+                  run_id: runId
+                });
+                core.info(`Integration run status: ${run.data.status} (${run.data.conclusion || 'pending'}).`);
+                if (run.data.status === 'completed') {
+                  if (run.data.conclusion !== 'success') {
+                    core.setFailed(`Integration workflow concluded with ${run.data.conclusion}.`);
+                  }
+                  return;
+                }
+              }
+              await sleep(pollMs);
+            }
+
+            core.setFailed('Timed out waiting for integration workflow to complete.');
