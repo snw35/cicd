@@ -11,6 +11,30 @@ Both containers are also udated by this workflow, and therefore by themselves. T
 
 For AI coding assistants, see `AGENTS.md` (repo context) and `REQUIREMENTS.md` (behavioral constraints).
 
+## PR integration checks
+
+Pull requests in this repo dispatch the upstream integration workflow in
+`snw35/cicd-integration` and wait for completion. This requires:
+
+- A repo secret named `CICD_INTEGRATION_TOKEN` with Actions read/write access to
+  `snw35/cicd-integration`.
+- `snw35/cicd-integration/.github/workflows/integration-update.yaml` to accept a
+  `cicd_ref` input and pass it through to the reusable workflow calls.
+
+Minimal upstream adjustment:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      cicd_ref:
+        required: false
+        default: main
+...
+with:
+  CICD_REF: ${{ inputs.cicd_ref || vars.CICD_REF }}
+```
+
 ## Troubleshooting Steps
 
 The container update steps can be run locally on Fedora with:

@@ -3,9 +3,15 @@
 This repository provides reusable GitHub Actions workflows to automate container
 updates using `nvchecker` and `dfupdate`.
 
+## Branches
+
+The primary branch is `main`, and the primary branch that all downstream respositories will use is also `main`.
+Feature branches will be named after their purpose, e.g `add-lint-checks` or similar.
+
 ## What lives where
 - `.github/workflows/github.yaml`: reusable workflow for build, update, tag, and publish.
 - `.github/workflows/create-release.yaml`: aggregates per-target updates and creates releases.
+- `.github/workflows/integration-pr.yaml`: PR check that dispatches the upstream integration workflow.
 - `.github/scripts/`: helper scripts used by the workflows for tag/metadata processing.
 - `integration-test/`: sample Dockerfile and nvchecker config for testing.
 
@@ -14,7 +20,8 @@ updates using `nvchecker` and `dfupdate`.
 - Outputs: `changed`, `docker_tag`, `proposed_tag`, `image`, `targets`.
 
 ## High-level flow
-- Pull requests only build a container image (no updates or publishing).
+- Pull requests only build a container image (no updates or publishing) and
+  dispatch the upstream integration workflow for same-repo PRs.
 - Scheduled/manual runs:
   - Run `nvchecker` and `dfupdate`.
   - Compute tag metadata and check for existing tags.
@@ -32,6 +39,7 @@ For reusable workflows, `github.event_name` reflects the caller event.
 | `.github/workflows/github.yaml` | schedule, workflow_dispatch | collect-metadata | `(github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.container-update.result != 'failure'` | `changed_any`, `docker_tags`, `proposed_tags`, `images`, `targets_json` (feeds workflow outputs) |
 | `.github/workflows/create-release.yaml` | workflow_call (any caller event) | aggregate-changes | - | `changed_any`, `docker_tags`, `proposed_tags`, `images`, `targets_json`, `meta_found`, `committed` |
 | `.github/workflows/create-release.yaml` | workflow_call (any caller event) | create-release | `needs.aggregate-changes.outputs.changed_any == 'true'` | `tag` (feeds workflow output) |
+| `.github/workflows/integration-pr.yaml` | pull_request | integration | `github.event.pull_request.head.repo.full_name == github.repository` | - |
 | `.github/workflows/lint-actions.yaml` | pull_request | actionlint | - | - |
 
 ## Helper scripts
