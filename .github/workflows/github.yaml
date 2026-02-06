@@ -254,6 +254,61 @@ jobs:
       - run: docker build -t "$IMAGE" .
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
         working-directory: ${{ env.WORKDIR }}
+      - name: Validate root docker-compose stack
+        if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
+        run: |
+          compose_file="${GITHUB_WORKSPACE}/docker-compose.yaml"
+          if [ ! -f "${compose_file}" ]; then
+            echo "No root docker-compose.yaml found. Skipping compose validation."
+            exit 0
+          fi
+
+          resolved_compose="$(mktemp)"
+          docker compose -f "${compose_file}" config > "${resolved_compose}"
+          if grep -Eqi '^[[:space:]]*gpus:[[:space:]]*' "${resolved_compose}" \
+            || grep -Eqi 'capabilities:[[:space:]]*\[[^]]*(^|[^[:alnum:]_])gpu([^[:alnum:]_]|$)[^]]*\]' "${resolved_compose}" \
+            || awk '
+              BEGIN { in_caps=0 }
+              /^[[:space:]]*capabilities:[[:space:]]*$/ { in_caps=1; next }
+              in_caps && /^[[:space:]]*-[[:space:]]*gpu([[:space:]]|$)/ { found=1; exit }
+              in_caps && /^[[:space:]]*[A-Za-z0-9_.-]+:[[:space:]]*/ { in_caps=0 }
+              in_caps && /^[^[:space:]]/ { in_caps=0 }
+              END { exit(found ? 0 : 1) }
+            ' "${resolved_compose}"; then
+            echo "GPU pass-through detected in ${compose_file}; skipping compose validation on non-GPU runner."
+            exit 0
+          fi
+
+          if [ -n "${WORKDIR}" ] && [ "${WORKDIR}" != "." ]; then
+            docker tag "${IMAGE}" "${GITHUB_REPOSITORY}:${WORKDIR}"
+          else
+            docker tag "${IMAGE}" "${GITHUB_REPOSITORY}:latest"
+          fi
+
+          cleanup() {
+            docker compose -f "${compose_file}" down --volumes --remove-orphans || true
+          }
+          trap cleanup EXIT
+
+          echo "Running compose stack from ${compose_file} using locally built images"
+          docker compose -f "${compose_file}" up -d --no-build --pull never
+          sleep 10
+
+          failed=0
+          container_ids="$(docker compose -f "${compose_file}" ps -q)"
+          for cid in ${container_ids}; do
+            name="$(docker inspect --format '{{.Name}}' "${cid}" | sed 's#^/##')"
+            status="$(docker inspect --format '{{.State.Status}}' "${cid}")"
+            if [ "${status}" = "stopped" ] || [ "${status}" = "exited" ] || [ "${status}" = "dead" ] || [ "${status}" = "restarting" ]; then
+              echo "::error::Compose container ${name} is in unhealthy state: ${status}"
+              failed=1
+            fi
+          done
+
+          if [ "${failed}" -ne 0 ]; then
+            echo "::error::Compose validation failed because one or more containers are stopped/exited/dead or restarting."
+            exit 1
+          fi
       - run: ~/official-images/test/run.sh "$IMAGE" || exit 1;
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - run: docker push "$IMAGE"
