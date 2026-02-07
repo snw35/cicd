@@ -22,6 +22,13 @@ Feature branches will be named after their purpose, e.g `add-lint-checks` or sim
 ## High-level flow
 - Pull requests only build a container image (no updates or publishing) and
   dispatch the upstream integration workflow for same-repo PRs.
+- The PR integration workflow creates an ephemeral branch in
+  `snw35/cicd-integration`, rewrites
+  `.github/workflows/integration-update.yaml` on that branch to pin
+  `snw35/cicd/.github/workflows/github.yaml` and
+  `snw35/cicd/.github/workflows/create-release.yaml` to the PR head SHA,
+  dispatches the integration workflow on that ephemeral branch, and polls until
+  completion.
 - Scheduled/manual runs:
   - Run `nvchecker` and `dfupdate`.
   - Compute tag metadata and check for existing tags.
@@ -41,6 +48,20 @@ For reusable workflows, `github.event_name` reflects the caller event.
 | `.github/workflows/create-release.yaml` | workflow_call (any caller event) | create-release | `needs.aggregate-changes.outputs.changed_any == 'true'` | `tag` (feeds workflow output) |
 | `.github/workflows/integration-pr.yaml` | pull_request | integration | `github.event.pull_request.head.repo.full_name == github.repository` | - |
 | `.github/workflows/lint-actions.yaml` | pull_request | actionlint | - | - |
+
+## Cross-repo token requirements
+- Secret: `CICD_INTEGRATION_TOKEN` (configured in `snw35/cicd`).
+- Fine-grained PAT scope: repository `snw35/cicd-integration` only.
+- Required repository permissions (least privilege):
+  - **Actions: Read and write**
+    - dispatch `integration-update.yaml`
+    - list/get workflow runs for polling
+  - **Contents: Read and write**
+    - read base branch workflow content
+    - create/update ephemeral branch refs
+    - write rewritten workflow file on ephemeral branch
+  - **Workflows: Read and write**
+    - Needed to read and modify `.github/workflows/*`
 
 ## Helper scripts
 - `dockerfile_base_tag.py`: extracts base image tag from the Dockerfile.
