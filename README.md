@@ -30,6 +30,8 @@ Required secret in this repo:
   - **Contents: Read and write** (required to read default-branch workflow
     content, create/update the ephemeral branch ref, and commit rewritten
     workflow content).
+  - **Workflows: Read and write** (required to read and modify the contents
+    of `.github/workflows` when patching the MR ref into the workflow dispatch).
 
 - `snw35/cicd-integration/.github/workflows/integration-update.yaml` to accept a
   `cicd_ref` input and pass it through to the reusable workflow calls.
