@@ -14,10 +14,23 @@ For AI coding assistants, see `AGENTS.md` (repo context) and `REQUIREMENTS.md` (
 ## PR integration checks
 
 Pull requests in this repo dispatch the upstream integration workflow in
-`snw35/cicd-integration` and wait for completion. This requires:
+`snw35/cicd-integration` and wait for completion.
 
-- A repo secret named `CICD_INTEGRATION_TOKEN` with Actions read/write access to
-  `snw35/cicd-integration`.
+`integration-pr.yaml` creates an ephemeral branch in `snw35/cicd-integration`,
+rewrites `.github/workflows/integration-update.yaml` on that branch to use the
+PR commit SHA for both reusable workflow `uses:` references, dispatches
+`integration-update.yaml` on that branch, and then polls the dispatched run.
+
+Required secret in this repo:
+
+- `CICD_INTEGRATION_TOKEN`: fine-grained PAT scoped to repository
+  `snw35/cicd-integration` with least-privilege permissions:
+  - **Actions: Read and write** (required to create workflow dispatch; also
+    covers polling/listing runs).
+  - **Contents: Read and write** (required to read default-branch workflow
+    content, create/update the ephemeral branch ref, and commit rewritten
+    workflow content).
+
 - `snw35/cicd-integration/.github/workflows/integration-update.yaml` to accept a
   `cicd_ref` input and pass it through to the reusable workflow calls.
 
@@ -29,10 +42,9 @@ on:
     inputs:
       cicd_ref:
         required: false
-        default: main
 ...
 with:
-  CICD_REF: ${{ inputs.cicd_ref || vars.CICD_REF }}
+  CICD_REF: ${{ inputs.cicd_ref || vars.CICD_REF || 'main' }}
 ```
 
 ## Troubleshooting Steps
