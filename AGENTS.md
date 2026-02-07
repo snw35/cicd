@@ -60,6 +60,8 @@ For reusable workflows, `github.event_name` reflects the caller event.
     - read base branch workflow content
     - create/update ephemeral branch refs
     - write rewritten workflow file on ephemeral branch
+  - **Workflows: Read and write**
+    - Needed to read and modify `.github/workflows/*`
 
 ## Helper scripts
 - `dockerfile_base_tag.py`: extracts base image tag from the Dockerfile.
