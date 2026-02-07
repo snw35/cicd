@@ -46,13 +46,18 @@ on:
         type: string
         default: "main"
         description: Ref (branch or tag) for CICD helper scripts.
+      RUN_AUTOMATED_UPDATE_ON_PR:
+        required: false
+        type: boolean
+        default: false
+        description: Run automated container update job on pull_request instead of build-only.
 
 jobs:
 
   # Run a standard build only on PR/MR create
   build-only:
     name: Container build
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && inputs.RUN_AUTOMATED_UPDATE_ON_PR == false
     runs-on: ubuntu-latest
     env:
       WORKDIR: ${{ inputs.WORKDIR }}
@@ -68,7 +73,7 @@ jobs:
   # Run nvchecker/dfupdate, build/push when needed, and package artifacts per target.
   container-update:
     name: Automated container update (${{ matrix.target.name }})
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && inputs.RUN_AUTOMATED_UPDATE_ON_PR)
     runs-on: ubuntu-latest
     permissions:
       contents: write
