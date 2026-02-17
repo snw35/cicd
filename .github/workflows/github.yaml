@@ -51,6 +51,11 @@ on:
         type: boolean
         default: false
         description: Run automated container update job on pull_request instead of build-only.
+      LATEST_TAG_WORKDIR:
+        required: false
+        type: string
+        default: ""
+        description: Optional workdir target that should receive the latest tag when no root (.) target is present.
 
 jobs:
 
@@ -249,6 +254,17 @@ jobs:
             echo "GHCR_IMAGE=ghcr.io/${GITHUB_REPOSITORY}:${DOCKER_TAG}"
             echo "TARGET_NAME=${TARGET_NAME}"
           } >> "$GITHUB_ENV"
+      - name: Decide latest-tag owner
+        env:
+          TARGETS_JSON_INPUT: ${{ inputs.TARGETS_JSON }}
+          INPUT_WORKDIR: ${{ inputs.WORKDIR }}
+          INPUT_LATEST_TAG_WORKDIR: ${{ inputs.LATEST_TAG_WORKDIR }}
+        run: |
+          python3 "$CICD_SCRIPTS_DIR/latest_tag_owner.py" \
+            --targets-json "${TARGETS_JSON_INPUT}" \
+            --input-workdir "${INPUT_WORKDIR}" \
+            --current-workdir "${WORKDIR}" \
+            --latest-tag-workdir "${INPUT_LATEST_TAG_WORKDIR}" >> "$GITHUB_ENV"
       - run: env | sort
       - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "$GITHUB_REPOSITORY_OWNER" --password-stdin
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
@@ -335,13 +351,13 @@ jobs:
       - run: docker push "ghcr.io/${GITHUB_REPOSITORY}:${WORKDIR}"
         if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.WORKDIR != '' && env.WORKDIR != '.'
       - run: docker tag "$IMAGE" "${GITHUB_REPOSITORY}:latest"
-        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && (env.WORKDIR == '' || env.WORKDIR == '.')
+        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.APPLY_LATEST_TAG == 'true'
       - run: docker push "${GITHUB_REPOSITORY}:latest"
-        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && (env.WORKDIR == '' || env.WORKDIR == '.')
+        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.APPLY_LATEST_TAG == 'true'
       - run: docker tag "$GHCR_IMAGE" "ghcr.io/${GITHUB_REPOSITORY}:latest"
-        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && (env.WORKDIR == '' || env.WORKDIR == '.')
+        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.APPLY_LATEST_TAG == 'true'
       - run: docker push "ghcr.io/${GITHUB_REPOSITORY}:latest"
-        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && (env.WORKDIR == '' || env.WORKDIR == '.')
+        if: (env.CHANGED == 'true' || env.TAG_EXISTS == 'false') && env.APPLY_LATEST_TAG == 'true'
       - run: docker images
         if: env.CHANGED == 'true' || env.TAG_EXISTS == 'false'
       - name: Stage and package repository changes
