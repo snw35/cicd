@@ -18,8 +18,10 @@ Pull requests in this repo dispatch the upstream integration workflow in
 
 `integration-pr.yaml` creates an ephemeral branch in `snw35/cicd-integration`,
 rewrites `.github/workflows/integration-update.yaml` on that branch to use the
-PR commit SHA for both reusable workflow `uses:` references, dispatches
-`integration-update.yaml` on that branch, and then polls the dispatched run.
+PR commit SHA for the `container-update.yaml` reference (its nested workflow calls
+use `$/` and follow that commit), dispatches `integration-update.yaml` on that
+branch, and then polls the dispatched run. The release job only runs on a default
+branch, so this check does not execute `create-release.yaml`.
 
 Required secret in this repo:
 
@@ -72,26 +74,37 @@ pre-commit install
 pre-commit run --all-files
 ```
 
-## Multiple Dockerfiles
+## Consumer setup
 
-The reusable workflow accepts a `WORKDIR` input so you can run it against Dockerfiles in subdirectories. From a downstream repository you can fan out over multiple services with a matrix, for example:
+A repository that wants automated updates carries one thin workflow that calls the shared workflow:
 
 ```yaml
-jobs:
-  update-images:
-    strategy:
-      matrix:
-        workdir: [web, backend]
-    uses: snw35/cicd/.github/workflows/github.yaml@main
-    with:
-      WORKDIR: ${{ matrix.workdir }}
-      IMAGE_TAG: CONFD_VERSION
-    secrets: inherit
+name: Docker Image CI
 
-  create-release:
-    needs: update-images
-    if: github.ref_name == github.event.repository.default_branch && needs.update-images.outputs.changed == 'true'
-    uses: snw35/cicd/.github/workflows/create-release.yaml@main
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '05 15 * * 0'
+  workflow_dispatch:
+
+jobs:
+  container-update:
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.run_id) || format('container-update-{0}', github.repository) }}
+      queue: max
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      packages: write
+    uses: snw35/cicd/.github/workflows/container-update.yaml@main
+    with:
+      WORKDIRS: '["web","backend"]'   # one entry per Dockerfile folder; '["."]' for a root Dockerfile
+      IMAGE_TAG: CONFD_VERSION        # Dockerfile ENV holding the main software version
+      # DATE_VERSION: true            # optional, for images bundling many packages with no single main one:
+      #                               # IMAGE_TAG then names an ENV holding a date, e.g. `ENV MYENV_VERSION 2026-10-04`
     secrets: inherit
 ```
 
@@ -100,6 +113,10 @@ Which will process:
  * repo/web/Dockerfile
  * repo/backend/Dockerfile
 
-Helper scripts are resolved from `snw35/cicd` and checked out to `.cicd` automatically when running from downstream repositories. Use the optional `CICD_REF` input to select the helper scripts ref (defaults to `main`).
+Optional inputs: `DATE_VERSION` (see below), `IMAGE_TAG_BY_WORKDIR` (JSON map overriding `IMAGE_TAG` per workdir), `LATEST_TAG_WORKDIR`, `RUN_AUTOMATED_UPDATE_ON_PR`, `CICD_REF` (helper scripts ref, defaults to `main`). `queue: max` keeps every waiting run instead of replacing the older one; actionlint may need an ignore for it (see `.github/actionlint.yaml` in the consumer repos).
 
-The default is to run for the current working directory only. Each matrix run emits `changed` (aggregated across targets), `docker_tag`, `proposed_tag`, `image`, and `targets` outputs. The downstream `create-release` workflow collects the per-target artifacts produced by the updater, applies the combined patch, and creates a single release if any Dockerfile changed. If multiple Dockerfiles were updated, the release tag and name will combine each updated workdir and tag (for example `web-1.0-backend-1.0`).
+Tags per Dockerfile: one image tag `<workdir>-<main version>` (no workdir prefix for `.`; characters illegal in a tag become `-`), plus the plain `<workdir>` tag for workdirs. The tag names the main software only: when the base image or a dependency changes the same tag is rebuilt and re-pushed, and the digest identifies an exact build. A git tag and GitHub release, named by the image tags of all workdirs joined in workdir order (for example `web-1.0-backend-2.1`), are created only when a main version changes; dependency- or base-only bumps update the existing release body (versions, digests) and create nothing new. A push to the default branch re-publishes the committed Dockerfile as-is (no nvchecker/dfupdate) for the workdirs whose files changed or whose published image is stale. Repos that build several variants use one folder per variant; the folder prefix is the variant marker.
+
+Date versions (`DATE_VERSION: true`): for "package" style images (for example a devcontainer or a cloud-tools image) with many equal-weight packages and no single main one. Add `ENV MYENV_VERSION 2026-10-04` once to the Dockerfile (use the date of the newest existing release; optionally `ENV MYENV_UPGRADE false` so dfupdate skips it explicitly) and set `IMAGE_TAG: MYENV_VERSION`. The ENV must occur once and be `YYYY-MM-DD` or `YYYY-MM-DD-N`, otherwise the run fails. When an update run changes the Dockerfile (a dependency or the base image), the ENV is rewritten to the run's UTC date before the build (the same date again becomes `-2`, `-3`, ...; an older or already-published tag is never reused), and the bot commit carries it. The image tag is then the date, and every new date is a new main version: new git tag and release, the tag never moves. Re-runs and hand fixes leave the ENV alone, so they keep the tag and refresh the existing release body; edit the date by hand to start a new release.
+
+Helper scripts are resolved from `snw35/cicd` and checked out to `.cicd` automatically when running from downstream repositories.

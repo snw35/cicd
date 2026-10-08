@@ -1,40 +1,41 @@
 name: Create release from matrix updates
 
+# Called by container-update.yaml after all legs finished. One job sees every
+# leg's artifact: it commits the legs' Dockerfile updates (update mode), decides
+# whether a release is needed and creates the combined git tag + release. The
+# tag is named by the main versions only (the legs' image tags joined), so it is
+# created only when a main version changes; a dependency-only or base-only bump
+# refreshes the existing release body instead.
+
 on:
   workflow_call:
     inputs:
-      targets_json:
-        description: "JSON array of target metadata (name, workdir, changed, docker_tag, etc.)"
-        required: false
-        default: ""
-        type: string
       CICD_REF:
         required: false
         default: "main"
         type: string
         description: Ref (branch or tag) for CICD helper scripts.
+      expected_workdirs:
+        required: false
+        default: ""
+        type: string
+        description: JSON array of workdirs that must have produced metadata; a missing leg blocks the release.
     outputs:
       tag:
-        description: Tag used for the release
-        value: ${{ jobs.create-release.outputs.tag }}
+        description: Combined tag of the release created or confirmed by this run (empty if none)
+        value: ${{ jobs.aggregate-changes.outputs.tag }}
 
 env:
   GH_TOKEN: ${{ github.token }}
 
 jobs:
   aggregate-changes:
-    name: Aggregate changes
+    name: Aggregate changes and release
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
-      changed_any: ${{ steps.collect.outputs.changed_any }}
-      docker_tags: ${{ steps.collect.outputs.docker_tags }}
-      proposed_tags: ${{ steps.collect.outputs.proposed_tags }}
-      images: ${{ steps.collect.outputs.images }}
-      targets_json: ${{ steps.collect.outputs.targets_json }}
-      meta_found: ${{ steps.collect.outputs.meta_found }}
-      committed: ${{ steps.commit.outputs.committed }}
+      tag: ${{ steps.release_sha.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,16 +91,18 @@ jobs:
           fi
       - uses: actions/download-artifact@v4
         with:
-          pattern: update-*-${{ github.run_attempt }}
+          pattern: update-*-${{ github.run_id }}
           path: /tmp/updates
           merge-multiple: true
-        continue-on-error: true
+      - name: Add authenticated remote
+        run: git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
       - id: collect
         env:
           UPDATES_DIR: /tmp/updates
+          EXPECTED_WORKDIRS: ${{ inputs.expected_workdirs }}
+          REMOTE: upstream
         run: python3 "$CICD_SCRIPTS_DIR/collect_updates.py"
       - name: Apply aggregated patches
-        if: steps.collect.outputs.meta_found == 'true'
         run: |
           shopt -s nullglob
           for patch in /tmp/updates/*-changes.patch; do
@@ -107,7 +110,6 @@ jobs:
           done
       - name: Commit aggregated changes
         id: commit
-        if: steps.collect.outputs.meta_found == 'true'
         run: |
           if git status --porcelain | grep -q .; then
             git config --local user.name "$GITHUB_REPOSITORY_OWNER"
@@ -119,103 +121,98 @@ jobs:
             echo "No changes to commit."
             echo "committed=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Push commits and tags
-        if: steps.collect.outputs.meta_found == 'true'
+      - name: Push commits
+        if: steps.commit.outputs.committed == 'true'
         run: |
-          git remote add upstream "https://${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" > /dev/null 2>&1
-          if [ "${{ steps.commit.outputs.committed }}" = "true" ]; then
-            # Rebase onto latest upstream to avoid non-fast-forward failures when multiple runs push
-            git fetch upstream "${GITHUB_REF_NAME}"
-            git rebase "upstream/${GITHUB_REF_NAME}"
-            git push --quiet --set-upstream upstream HEAD
-          else
-            echo "No commits to push."
-          fi
-
-  create-release:
-    name: Create release
-    needs: aggregate-changes
-    # Only run when the aggregated changes report an update or missing tag
-    if: needs.aggregate-changes.outputs.changed_any == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      tag: ${{ steps.pick_tag.outputs.tag }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Resolve CICD helper repo
+          # Rebase onto latest upstream to avoid non-fast-forward failures when multiple runs push
+          git fetch upstream "${GITHUB_REF_NAME}"
+          git rebase "upstream/${GITHUB_REF_NAME}"
+          git push --quiet --set-upstream upstream HEAD
+      # Update mode: HEAD after the rebase+push (the rebase rewrites the SHA).
+      # Nothing committed (publish mode, or no change): the legs' common tip_sha,
+      # i.e. the commit whose Dockerfiles were built. It must be on the default branch.
+      - name: Resolve release commit
+        id: release_sha
         env:
-          INPUT_CICD_REF: ${{ inputs.CICD_REF }}
+          COMMITTED: ${{ steps.commit.outputs.committed }}
+          TIP_SHA: ${{ steps.collect.outputs.tip_sha }}
+          RELEASE_NEEDED: ${{ steps.collect.outputs.release_needed }}
+          COMBINED_TAG: ${{ steps.collect.outputs.combined_tag }}
         run: |
-          repo="snw35/cicd"
-          ref="${INPUT_CICD_REF:-}"
-          if [ -z "$ref" ]; then
-            if [ "$GITHUB_REPOSITORY" = "$repo" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
-              ref="${GITHUB_REF_NAME}"
+          if [ "${COMMITTED}" = "true" ]; then
+            sha="$(git rev-parse HEAD)"
+          else
+            sha="${TIP_SHA}"
+          fi
+          git fetch --quiet upstream "${GITHUB_REF_NAME}"
+          if ! git merge-base --is-ancestor "$sha" "upstream/${GITHUB_REF_NAME}"; then
+            echo "::error::Release commit ${sha} is not on ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          if [ "${RELEASE_NEEDED}" = "true" ]; then
+            echo "tag=${COMBINED_TAG}" >> "$GITHUB_OUTPUT"
+          fi
+      # Create, never move: an existing tag at (or before) the commit is a no-op.
+      - name: Create release tag
+        if: steps.collect.outputs.release_needed == 'true'
+        env:
+          TAG: ${{ steps.collect.outputs.combined_tag }}
+          SHA: ${{ steps.release_sha.outputs.sha }}
+        run: |
+          if [ -z "$(git ls-remote --tags upstream "refs/tags/${TAG}")" ]; then
+            git tag "$TAG" "$SHA"
+            git push upstream "refs/tags/${TAG}"
+          else
+            git fetch --quiet upstream "+refs/tags/${TAG}:refs/tags/${TAG}"
+            existing="$(git rev-parse "${TAG}^{commit}")"
+            if [ "$existing" = "$SHA" ] || git merge-base --is-ancestor "$existing" "upstream/${GITHUB_REF_NAME}"; then
+              echo "Tag ${TAG} already exists at ${existing}; leaving it."
             else
-              ref="main"
+              echo "::error::Tag ${TAG} exists at ${existing}, which is not on ${GITHUB_REF_NAME}."
+              exit 1
             fi
           fi
-          if [ "$repo" = "$GITHUB_REPOSITORY" ] && [ -d "${GITHUB_WORKSPACE}/.github/scripts" ]; then
-            repo_dir="${GITHUB_WORKSPACE}"
-            scripts_dir="${repo_dir}/.github/scripts"
-            need_checkout="false"
-          else
-            repo_dir="${GITHUB_WORKSPACE}/.cicd"
-            scripts_dir="${repo_dir}/.github/scripts"
-            need_checkout="true"
-          fi
-          {
-            echo "CICD_REPO=$repo"
-            echo "CICD_REF=$ref"
-            echo "CICD_REPO_DIR=$repo_dir"
-            echo "CICD_SCRIPTS_DIR=$scripts_dir"
-            echo "CICD_NEED_CHECKOUT=$need_checkout"
-          } >> "$GITHUB_ENV"
-      - name: Checkout CICD scripts
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CICD_REPO }}
-          ref: ${{ env.CICD_REF }}
-          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
-          path: .cicd
-          fetch-depth: 1
-      - name: Ignore CICD helper checkout
-        if: env.CICD_NEED_CHECKOUT == 'true'
-        run: |
-          exclude_file="${GITHUB_WORKSPACE}/.git/info/exclude"
-          if [ -f "${exclude_file}" ] && ! grep -qx "/.cicd/" "${exclude_file}"; then
-            echo "/.cicd/" >> "${exclude_file}"
-          fi
-      - name: Pick combined release tag from changed targets
-        id: pick_tag
+      - name: Render release body
+        if: steps.collect.outputs.blocked != 'true' && steps.collect.outputs.combined_tag != ''
         env:
-          TARGETS_JSON: ${{ needs.aggregate-changes.outputs.targets_json != '' && needs.aggregate-changes.outputs.targets_json || inputs.targets_json }}
-        run: |
-          tag="$(python3 "$CICD_SCRIPTS_DIR/pick_release_tag.py")"
-          if [ -n "$tag" ]; then
-            echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          else
-            echo "No changed targets found; skipping tag creation."
-          fi
-      - name: Sync release tag to latest commit
-        if: steps.pick_tag.outputs.tag != ''
-        run: |
-          tag="${{ steps.pick_tag.outputs.tag }}"
-          git fetch origin "${GITHUB_REF_NAME}"
-          git checkout -B release-tag "origin/${GITHUB_REF_NAME}"
-          git tag -f "$tag"
-          git push --force origin "refs/tags/${tag}"
-      - uses: softprops/action-gh-release@v2
-        if: steps.pick_tag.outputs.tag != ''
-        with:
-          tag_name: ${{ steps.pick_tag.outputs.tag }}
-          name: Release ${{ steps.pick_tag.outputs.tag }}
-          body: Automated release for ${{ steps.pick_tag.outputs.tag }}
-          target_commitish: ${{ github.ref_name }}
+          STATE_SHA: ${{ steps.release_sha.outputs.sha }}
+        run: python3 "$CICD_SCRIPTS_DIR/collect_updates.py" body
+      # Create the release when the tag has none; otherwise refresh its body only
+      # when a leg published and the text differs. Only body and latest flag are
+      # touched, so attached assets stay.
+      - name: Create or refresh the release
+        if: steps.collect.outputs.blocked != 'true' && steps.collect.outputs.combined_tag != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.collect.outputs.combined_tag }}
+          STATE_SHA: ${{ steps.release_sha.outputs.sha }}
+          PUBLISHED_ANY: ${{ steps.collect.outputs.published_any }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag --latest --title "Release ${TAG}" --notes-file /tmp/release-body.md
+            exit 0
+          fi
+          if [ "${PUBLISHED_ANY}" != "true" ]; then
+            echo "Nothing was published; leaving the release body."
+            exit 0
+          fi
+          current="$(gh release view "$TAG" --json body --jq .body)"
+          old_sha="$(sed -n 's/.*cicd-state-sha: \([0-9a-f]*\).*/\1/p' <<< "$current" | head -1)"
+          if [ -n "$old_sha" ] && git cat-file -e "${old_sha}^{commit}" 2>/dev/null \
+            && ! git merge-base --is-ancestor "$old_sha" "$STATE_SHA"; then
+            echo "::warning::Release ${TAG} describes ${old_sha}, which is newer than ${STATE_SHA}; not editing."
+            exit 0
+          fi
+          if [ "$current" = "$(cat /tmp/release-body.md)" ]; then
+            echo "Release body already current."
+          else
+            gh release edit "$TAG" --notes-file /tmp/release-body.md
+          fi
+      # Successful legs were committed above; a leg without a result fails the run.
+      - name: Fail when a leg has no result
+        if: steps.collect.outputs.blocked == 'true'
+        env:
+          BLOCKING: ${{ steps.collect.outputs.blocking }}
+        run: |
+          echo "::error::Release blocked: no result from leg(s): ${BLOCKING}"
+          exit 1
