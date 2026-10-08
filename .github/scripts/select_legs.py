@@ -137,7 +137,9 @@ def main() -> int:
     print(f"tip={tip}")
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
         handle.write(f"tip_sha={tip}\n")
-        handle.write(f"run_date={datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}\n")
+        handle.write(
+            f"run_date={datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}\n"
+        )
     return 0
 
 

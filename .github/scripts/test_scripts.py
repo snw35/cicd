@@ -77,9 +77,7 @@ class ImageTagTests(unittest.TestCase):
 
     def test_cloudenv_space_form_and_many_versions_stay_short(self):
         envs = self.envs(CLOUDENV)
-        self.assertGreaterEqual(
-            len([k for k in envs if k.endswith("_VERSION")]), 15
-        )
+        self.assertGreaterEqual(len([k for k in envs if k.endswith("_VERSION")]), 15)
         tag = de.build_alias(envs, "HELM_VERSION", ".")
         self.assertEqual(tag, "1.1.0")
         self.assertLess(len(tag), 128)
@@ -149,10 +147,14 @@ class DateVersionTests(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 dv.read_current(f"ENV X_VERSION {bad}\n", "X_VERSION")
         with self.assertRaises(ValueError):
-            dv.read_current("ENV X_VERSION 2026-10-04\nENV X_VERSION 2026-10-05\n", "X_VERSION")
+            dv.read_current(
+                "ENV X_VERSION 2026-10-04\nENV X_VERSION 2026-10-05\n", "X_VERSION"
+            )
         with self.assertRaises(ValueError):
             dv.read_current("FROM a:1\n", "X_VERSION")
-        self.assertEqual(dv.read_current("ENV X_VERSION=2026-10-04-3\n", "X_VERSION"), "2026-10-04-3")
+        self.assertEqual(
+            dv.read_current("ENV X_VERSION=2026-10-04-3\n", "X_VERSION"), "2026-10-04-3"
+        )
 
     def test_collision_guard_increments_past_existing_tags(self):
         taken = {"r:cu12-2026-10-11", "r:cu12-2026-10-11-2"}
@@ -162,7 +164,9 @@ class DateVersionTests(unittest.TestCase):
         self.assertEqual(version, "2026-10-11-3")
 
     def test_read_and_rewrite_keep_form_and_other_lines(self):
-        self.assertEqual(dv.read_current(CLOUDENV_REAL, "CLOUDENV_VERSION"), "2026-10-04")
+        self.assertEqual(
+            dv.read_current(CLOUDENV_REAL, "CLOUDENV_VERSION"), "2026-10-04"
+        )
         new = dv.rewrite(CLOUDENV_REAL, "CLOUDENV_VERSION", "2026-10-11")
         self.assertIn("ENV CLOUDENV_VERSION 2026-10-11\n", new)
         self.assertEqual(new.replace("2026-10-11", "2026-10-04"), CLOUDENV_REAL)
@@ -278,13 +282,17 @@ class SelectLegsTests(unittest.TestCase):
         # A's image is at the tip (nothing changed since); B's label is older and a
         # shared root file changed in between.
         a = sl.plan(legs, "tip", "tip", lambda b, t: True, lambda b, t: [])
-        b = sl.plan(legs, "old", "tip", lambda b, t: True, lambda b, t: ["docker-compose.yml"])
+        b = sl.plan(
+            legs, "old", "tip", lambda b, t: True, lambda b, t: ["docker-compose.yml"]
+        )
         self.assertNotIn("cu12", a)
         self.assertIn("cu13", b)
 
     def test_bot_only_and_ignored_only_select_nothing(self):
         self.assertEqual(sl.select_legs(["."], ["README.md", "old_ver.json"]), [])
-        self.assertEqual(sl.plan(["."], "b", "t", lambda b, t: True, lambda b, t: []), [])
+        self.assertEqual(
+            sl.plan(["."], "b", "t", lambda b, t: True, lambda b, t: []), []
+        )
 
     def test_non_ancestor_base_selects_leg(self):
         self.assertEqual(
