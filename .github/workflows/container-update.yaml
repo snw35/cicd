@@ -1,0 +1,114 @@
+name: Container update (shared consumer workflow)
+
+# Shared consumer workflow: owns the workdir matrix, fail-fast, permissions, the
+# planning job and the release job, so consumer repos only carry a thin caller.
+# Nested calls use `$/` so github.yaml and create-release.yaml run from the same
+# commit as this file.
+
+on:
+  workflow_call:
+    inputs:
+      WORKDIRS:
+        description: JSON array of workdirs, e.g. '["cu12","cu13"]' or '["."]'.
+        required: true
+        type: string
+      IMAGE_TAG:
+        description: Dockerfile ENV name of the main software (the image tag is [workdir-]<its value>).
+        required: true
+        type: string
+      IMAGE_TAG_BY_WORKDIR:
+        description: Optional JSON map of workdir to IMAGE_TAG override (integration fixture only).
+        required: false
+        default: "{}"
+        type: string
+      DATE_VERSION:
+        description: IMAGE_TAG names a date-version ENV (YYYY-MM-DD[-N]); updates that change the Dockerfile bump it to today (UTC).
+        required: false
+        default: false
+        type: boolean
+      LATEST_TAG_WORKDIR:
+        required: false
+        default: ""
+        type: string
+        description: Optional workdir target that should receive the latest tag when no root (.) target is present.
+      RUN_AUTOMATED_UPDATE_ON_PR:
+        required: false
+        default: false
+        type: boolean
+        description: Run automated container update job on pull_request instead of build-only.
+      CICD_REF:
+        required: false
+        default: "main"
+        type: string
+        description: Ref (branch or tag) for CICD helper scripts.
+
+jobs:
+  # Resolve the default-branch tip once so every leg of a push run builds the same commit.
+  plan:
+    name: Plan
+    if: >-
+      ${{ github.event_name != 'pull_request'
+      && (github.event_name != 'push' || github.ref_name == github.event.repository.default_branch) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tip_sha: ${{ steps.plan.outputs.tip_sha }}
+      run_date: ${{ steps.plan.outputs.run_date }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Checkout CICD scripts
+        uses: actions/checkout@v4
+        with:
+          repository: snw35/cicd
+          ref: ${{ inputs.CICD_REF }}
+          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_TOKEN || github.token }}
+          path: .cicd
+          fetch-depth: 1
+      - id: plan
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python3 .cicd/.github/scripts/select_legs.py
+
+  update-images:
+    name: Update images (${{ matrix.workdir }})
+    needs: plan
+    # A failed plan stops the legs.
+    if: ${{ !cancelled() && needs.plan.result != 'failure' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        workdir: ${{ fromJSON(inputs.WORKDIRS) }}
+    permissions:
+      contents: write
+      packages: write
+    uses: $/.github/workflows/github.yaml
+    with:
+      WORKDIR: ${{ matrix.workdir }}
+      IMAGE_TAG: ${{ fromJSON(inputs.IMAGE_TAG_BY_WORKDIR)[matrix.workdir] || inputs.IMAGE_TAG }}
+      TIP_SHA: ${{ needs.plan.outputs.tip_sha }}
+      WORKDIRS: ${{ inputs.WORKDIRS }}
+      DATE_VERSION: ${{ inputs.DATE_VERSION }}
+      RUN_DATE: ${{ needs.plan.outputs.run_date }}
+      LATEST_TAG_WORKDIR: ${{ inputs.LATEST_TAG_WORKDIR }}
+      RUN_AUTOMATED_UPDATE_ON_PR: ${{ inputs.RUN_AUTOMATED_UPDATE_ON_PR }}
+      CICD_REF: ${{ inputs.CICD_REF }}
+    secrets: inherit
+
+  # `!cancelled()` lets this run when a leg failed: successful legs are still
+  # committed, but no tag is created until every leg has an image (create-release.yaml).
+  release:
+    needs: update-images
+    if: >-
+      ${{ !cancelled() && github.event_name != 'pull_request'
+      && github.ref_name == github.event.repository.default_branch
+      && needs.update-images.result != 'skipped' }}
+    permissions:
+      contents: write
+    uses: $/.github/workflows/create-release.yaml
+    with:
+      expected_workdirs: ${{ inputs.WORKDIRS }}
+      CICD_REF: ${{ inputs.CICD_REF }}
+    secrets: inherit

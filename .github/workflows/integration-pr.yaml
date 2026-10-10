@@ -68,21 +68,40 @@ jobs:
               }
             };
 
-            const rewriteReusableRef = (yaml, workflowName, refValue) => {
-              const pattern = new RegExp(
-                `uses:\\s*snw35\\/cicd\\/\\.github\\/workflows\\/${workflowName}@[\\S]+`,
-                'g'
-              );
-              const matches = yaml.match(pattern) || [];
-              if (matches.length !== 1) {
-                throw new Error(
-                  `Expected exactly one uses ref for ${workflowName} in ${workflowPath}, found ${matches.length}.`
+            // Rewrite the pinned cicd reusable-workflow refs in the fixture caller
+            // to the PR head SHA. Each workflow may appear 0 or 1 times and at
+            // least one match overall is required. (The nested github.yaml and
+            // create-release.yaml calls inside container-update.yaml use `$/`, so
+            // they follow that commit automatically.) Note: the release job only
+            // runs on a default branch, so this run does not execute create-release.yaml.
+            const reusableWorkflows = ['container-update.yaml', 'github.yaml', 'create-release.yaml'];
+            const rewriteReusableRefs = (yaml, workflowNames, refValue) => {
+              let total = 0;
+              let result = yaml;
+              for (const workflowName of workflowNames) {
+                const escaped = workflowName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const pattern = new RegExp(
+                  `uses:\\s*snw35\\/cicd\\/\\.github\\/workflows\\/${escaped}@[\\S]+`,
+                  'g'
+                );
+                const matches = result.match(pattern) || [];
+                if (matches.length > 1) {
+                  throw new Error(
+                    `Expected at most one uses ref for ${workflowName} in ${workflowPath}, found ${matches.length}.`
+                  );
+                }
+                total += matches.length;
+                result = result.replace(
+                  pattern,
+                  `uses: snw35/cicd/.github/workflows/${workflowName}@${refValue}`
                 );
               }
-              return yaml.replace(
-                pattern,
-                `uses: snw35/cicd/.github/workflows/${workflowName}@${refValue}`
-              );
+              if (total < 1) {
+                throw new Error(
+                  `Expected at least one uses ref for ${workflowNames.join(', ')} in ${workflowPath}, found none.`
+                );
+              }
+              return result;
             };
 
             await resetBranchFromBase(tempRef, baseRef);
@@ -103,8 +122,7 @@ jobs:
             }
 
             let workflowYaml = Buffer.from(baseWorkflow.data.content, 'base64').toString('utf8');
-            workflowYaml = rewriteReusableRef(workflowYaml, 'github.yaml', cicdRef);
-            workflowYaml = rewriteReusableRef(workflowYaml, 'create-release.yaml', cicdRef);
+            workflowYaml = rewriteReusableRefs(workflowYaml, reusableWorkflows, cicdRef);
 
             await github.rest.repos.createOrUpdateFileContents({
               owner,

@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import json
-from typing import Optional
 
 
 def normalize_workdir(value: str) -> str:
@@ -14,38 +12,9 @@ def normalize_workdir(value: str) -> str:
     return value
 
 
-def detect_root_target(targets_json: str) -> Optional[bool]:
-    if not targets_json:
-        return None
-
-    try:
-        targets = json.loads(targets_json)
-    except Exception:
-        return False
-
-    if not isinstance(targets, list):
-        return False
-
-    for target in targets:
-        if not isinstance(target, dict):
-            continue
-        if normalize_workdir(str(target.get("workdir", "."))) == ".":
-            return True
-
-    return False
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Compute latest-tag ownership flags for workflow targets."
-    )
-    parser.add_argument(
-        "--targets-json", default="", help="JSON array of target objects"
-    )
-    parser.add_argument(
-        "--input-workdir",
-        default=".",
-        help="Workflow input WORKDIR fallback when TARGETS_JSON is empty",
     )
     parser.add_argument(
         "--current-workdir",
@@ -64,11 +33,8 @@ def main() -> int:
     if args.latest_tag_workdir:
         configured_latest_workdir = normalize_workdir(args.latest_tag_workdir)
 
-    root_from_targets = detect_root_target(args.targets_json)
-    if root_from_targets is None:
-        root_target_exists = normalize_workdir(args.input_workdir) == "."
-    else:
-        root_target_exists = root_from_targets
+    # Each leg is its own workflow call: a root target exists iff this leg is it.
+    root_target_exists = current_workdir == "."
 
     apply_latest_tag = False
     latest_tag_owner = "none"

@@ -1,0 +1,8 @@
+# actionlint (through v1.7.12) rejects the documented same-repo reusable-workflow
+# form `uses: $/.github/workflows/<file>`. container-update.yaml relies on it so
+# its nested calls run from the same commit as the caller. Remove this file once
+# actionlint supports `$/`.
+paths:
+  .github/workflows/container-update.yaml:
+    ignore:
+      - 'reusable workflow call "\$/\.github/workflows/[a-z-]+\.yaml" at "uses" is not following the format'
